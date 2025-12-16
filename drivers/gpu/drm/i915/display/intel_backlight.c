@@ -1557,6 +1557,12 @@ static int ext_pwm_setup_backlight(struct intel_connector *connector,
 		desc = "SoC";
 	}
 
+    	/* Fallback for broken ACPI: unnamed LPSS PWM */
+    	if (IS_ERR(panel->backlight.pwm)) {
+        	panel->backlight.pwm = pwm_get(display->drm->dev, NULL);
+        	desc = "SoC (fallback)";
+	}
+	
 	if (IS_ERR(panel->backlight.pwm)) {
 		drm_err(display->drm,
 			"[CONNECTOR:%d:%s] Failed to get the %s PWM chip\n",
