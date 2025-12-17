@@ -1557,14 +1557,14 @@ static int ext_pwm_setup_backlight(struct intel_connector *connector,
 		desc = "SoC";
 	}
 	
-	if (IS_ERR(panel->backlight.pwm)) {
-            drm_warn(display->drm,
-        	"[CONNECTOR:%d:%s] LPSS PWM not exposed, using native i915 backlight\n",
-                connector->base.base.id, connector->base.name);
-    	    
-	    panel->backlight.pwm = NULL;
-            panel->backlight.type = INTEL_BACKLIGHT_NATIVE;
-            return 0;
+	 if (IS_ERR(panel->backlight.pwm)) {
+  	     drm_warn(display->drm,
+        	 "[CONNECTOR:%d:%s] LPSS PWM not exposed, continuing without PWM\n",
+                 connector->base.base.id, connector->base.name);
+
+         panel->backlight.pwm = NULL;
+         return 0;
+
 	}
 	
 	panel->backlight.pwm_level_max = 100; /* 100% */
