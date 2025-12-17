@@ -1556,17 +1556,21 @@ static int ext_pwm_setup_backlight(struct intel_connector *connector,
 					       "pwm_soc_backlight");
 		desc = "SoC";
 	}
-	
-	if (IS_ERR(panel->backlight.pwm)) {
-            drm_warn(display->drm,
-        	"[CONNECTOR:%d:%s] LPSS PWM not exposed, using native i915 backlight\n",
-                connector->base.base.id, connector->base.name);
-    	    
-	    panel->backlight.pwm = NULL;
-            panel->backlight.type = INTEL_BACKLIGHT_NATIVE;
-            return 0;
+
+    	/* Fallback for broken ACPI: unnamed LPSS PWM */
+    	if (IS_ERR(panel->backlight.pwm)) {
+        	panel->backlight.pwm = pwm_get(display->drm->dev, NULL);
+        	desc = "SoC (fallback)";
 	}
 	
+	if (IS_ERR(panel->backlight.pwm)) {
+		drm_err(display->drm,
+			"[CONNECTOR:%d:%s] Failed to get the %s PWM chip\n",
+			connector->base.base.id, connector->base.name, desc);
+		panel->backlight.pwm = NULL;
+		return -ENODEV;
+	}
+
 	panel->backlight.pwm_level_max = 100; /* 100% */
 	panel->backlight.pwm_level_min = get_backlight_min_vbt(connector);
 
