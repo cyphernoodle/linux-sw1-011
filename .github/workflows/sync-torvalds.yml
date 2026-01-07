@@ -1,4 +1,4 @@
-name: Sync with torvalds/linux
+name: Sync with torvalds/linux (fast)
 
 on:
   schedule:
@@ -14,23 +14,29 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Upstream-Acer
+      - name: Checkout Upstream-Acer (shallow)
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           ref: Upstream-Acer
+          fetch-depth: 1
+
+      - name: Configure git identity
+        run: |
+          git config user.name "Bastián Almendras"
+          git config user.email "bastian.almendras96@gmail.com"
 
       - name: Add torvalds/linux as upstream
         run: |
-          git remote remove torvalds || true
           git remote add torvalds https://github.com/torvalds/linux.git
-          git fetch torvalds
+
+      - name: Fetch torvalds/master (shallow, no tags)
+        run: |
+          git fetch torvalds master --depth=50 --no-tags
 
       - name: Prepare sync branch
         run: |
-          git branch -D sync-torvalds || true
           git checkout -b sync-torvalds
-          git merge torvalds/master --no-edit || true
+          git merge torvalds/master --no-edit --signoff || true
 
       - name: Create or update Pull Request
         uses: peter-evans/create-pull-request@v6
@@ -41,6 +47,6 @@ jobs:
           body: |
             Actualización automática desde https://github.com/torvalds/linux
 
-            Base: Upstream-Acer
-            Método: merge (no rebase)
+            Método: merge (shallow fetch optimizado)
+            Signed-off-by: Bastián Almendras <bastian.almendras96@gmail.com>
           labels: upstream, kernel, automated
