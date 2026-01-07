@@ -1,4 +1,4 @@
-name: PR: Update Upstream-Acer from mirrors
+name: Update Upstream-Acer from mirrors
 
 on:
   workflow_dispatch:
