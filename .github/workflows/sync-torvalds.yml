@@ -1,0 +1,46 @@
+name: Sync with torvalds/linux
+
+on:
+  schedule:
+    - cron: '0 4 */5 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Upstream-Acer
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: Upstream-Acer
+
+      - name: Add torvalds/linux as upstream
+        run: |
+          git remote remove torvalds || true
+          git remote add torvalds https://github.com/torvalds/linux.git
+          git fetch torvalds
+
+      - name: Prepare sync branch
+        run: |
+          git branch -D sync-torvalds || true
+          git checkout -b sync-torvalds
+          git merge torvalds/master --no-edit || true
+
+      - name: Create or update Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          base: Upstream-Acer
+          branch: sync-torvalds
+          title: "Sync with torvalds/linux"
+          body: |
+            Actualización automática desde https://github.com/torvalds/linux
+
+            Base: Upstream-Acer
+            Método: merge (no rebase)
+          labels: upstream, kernel, automated
