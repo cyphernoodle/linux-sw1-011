@@ -1,4 +1,4 @@
-name: Sync with torvalds/linux (fast)
+name: Sync with torvalds/linux (fast + signed)
 
 on:
   schedule:
@@ -31,11 +31,10 @@ jobs:
 
       - name: Fetch torvalds/master (shallow, no tags)
         run: |
-          git fetch torvalds master --depth=50 --no-tags
+          git fetch torvalds master --depth=200 --no-tags
 
-      - name: Prepare sync branch
+      - name: Merge torvalds/master into Upstream-Acer
         run: |
-          git checkout -b sync-torvalds
           git merge torvalds/master --no-edit --signoff || true
 
       - name: Create or update Pull Request
@@ -44,9 +43,14 @@ jobs:
           base: Upstream-Acer
           branch: sync-torvalds
           title: "Sync with torvalds/linux"
+          commit-message: |
+            Merge torvalds/master into Upstream-Acer
+
+            Signed-off-by: Bastián Almendras <bastian.almendras96@gmail.com>
           body: |
             Actualización automática desde https://github.com/torvalds/linux
 
-            Método: merge (shallow fetch optimizado)
-            Signed-off-by: Bastián Almendras <bastian.almendras96@gmail.com>
+            - Merge directo (no rebase)
+            - Shallow fetch optimizado
+            - Signed-off-by automático
           labels: upstream, kernel, automated
