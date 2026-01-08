@@ -3,7 +3,7 @@ name: PR torvalds → Upstream-Acer
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 4 * * *"   # diario, ajusta si quieres
+    - cron: "0 4 * * *"
 
 jobs:
   pr-torvalds:
@@ -20,7 +20,12 @@ jobs:
         run: |
           git fetch origin torvalds-base
 
-      - name: Create PR if torvalds has new commits
+      - name: Create branch with torvalds changes
+        run: |
+          git checkout -B pr-torvalds
+          git merge --no-ff --no-edit origin/torvalds-base || true
+
+      - name: Create PR torvalds → Upstream-Acer
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -28,6 +33,6 @@ jobs:
           branch: pr-torvalds
           title: "sync: torvalds/linux → Upstream-Acer"
           body: |
-            Automated sync from torvalds/linux.
+            Automated merge of torvalds/linux into Upstream-Acer.
             Mirror branch: torvalds-base
           signoff: true
