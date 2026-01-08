@@ -1,38 +1,35 @@
 name: Sync upstream mirrors
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: "0 3 */5 * *" # cada 5 días a las 03:00 UTC
+    - cron: "0 */12 * * *"   # cada 12 horas
+  workflow_dispatch:
 
 jobs:
   sync:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo (shallow)
+      - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: 0
 
-      - name: Configure git
-        run: |
-          git config user.name "Bastián Almendras"
-          git config user.email "bastian.almendras96@gmail.com"
-
-      - name: Add upstream remotes
+      - name: Add remotes
         run: |
           git remote add torvalds https://github.com/torvalds/linux.git || true
           git remote add sunxi https://github.com/jwrdegoede/linux-sunxi.git || true
 
       - name: Sync torvalds-base
         run: |
-          git fetch torvalds master --depth=1
-          git checkout -B torvalds-base FETCH_HEAD
+          git fetch torvalds master
+          git checkout torvalds-base
+          git reset --hard torvalds/master
           git push origin torvalds-base --force
 
       - name: Sync sunxi-base
         run: |
-          git fetch sunxi main --depth=1
-          git checkout -B sunxi-base FETCH_HEAD
+          git fetch sunxi main
+          git checkout sunxi-base
+          git reset --hard sunxi/main
           git push origin sunxi-base --force
