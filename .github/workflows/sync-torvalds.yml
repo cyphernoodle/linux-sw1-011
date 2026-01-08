@@ -20,9 +20,9 @@ jobs:
         run: |
           git fetch origin torvalds-base
 
-      - name: Create branch with torvalds changes
+      - name: Merge torvalds into Upstream-Acer (local only)
         run: |
-          git checkout -B pr-torvalds
+          git checkout -B work-torvalds
           git merge --no-ff --no-edit origin/torvalds-base || true
 
       - name: Create PR torvalds → Upstream-Acer
@@ -31,8 +31,8 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: Upstream-Acer
           branch: pr-torvalds
-          title: "sync: torvalds/linux → Upstream-Acer"
+          title: "sync: torvalds → Upstream-Acer"
           body: |
-            Automated merge of torvalds/linux into Upstream-Acer.
+            Automated sync from Linus Torvalds' tree.
             Mirror branch: torvalds-base
           signoff: true
