@@ -1,0 +1,33 @@
+name: PR linux-sunxi → Upstream-Acer
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 5 * * *"   # diario, después del sync web
+
+jobs:
+  pr-sunxi:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Upstream-Acer (SAFE)
+        uses: actions/checkout@v4
+        with:
+          ref: Upstream-Acer
+          fetch-depth: 0
+
+      - name: Fetch sunxi mirror
+        run: |
+          git fetch origin sunxi-base
+
+      - name: Create PR if sunxi has new commits
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: Upstream-Acer
+          branch: pr-sunxi
+          title: "sync: linux-sunxi → Upstream-Acer"
+          body: |
+            Automated sync from jwrdegoede/linux-sunxi.
+            Mirror branch: sunxi-base
+          signoff: true
