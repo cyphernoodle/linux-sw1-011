@@ -1,0 +1,17 @@
+name: Auto-merge Upstream-Acer PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - Upstream-Acer
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enable auto-merge
+        uses: peter-evans/enable-pull-request-automerge@v3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          merge-method: merge
