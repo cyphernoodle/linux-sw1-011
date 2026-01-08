@@ -1,37 +1,33 @@
-name: Sync Torvalds into Upstream-Acer (PR)
+name: PR torvalds → Upstream-Acer
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 */12 * * *" # opcional
+    - cron: "0 4 * * *"   # diario, ajusta si quieres
 
 jobs:
-  sync:
+  pr-torvalds:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout Upstream-Acer (SAFE)
         uses: actions/checkout@v4
         with:
+          ref: Upstream-Acer
           fetch-depth: 0
 
-      - name: Add torvalds remote
+      - name: Fetch torvalds mirror
         run: |
-          git remote add torvalds https://github.com/torvalds/linux.git || true
-          git fetch torvalds master
+          git fetch origin torvalds-base
 
-      - name: Update torvalds-base branch
-        run: |
-          git checkout -B torvalds-base torvalds/master
-          git push origin torvalds-base --force
-
-      - name: Create PR to Upstream-Acer
+      - name: Create PR if torvalds has new commits
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: Upstream-Acer
-          branch: torvalds-base
+          branch: pr-torvalds
           title: "sync: torvalds/linux → Upstream-Acer"
           body: |
-            Sync latest commits from torvalds/linux into Upstream-Acer.
-          labels: torvalds, upstream
+            Automated sync from torvalds/linux.
+            Mirror branch: torvalds-base
+          signoff: true
