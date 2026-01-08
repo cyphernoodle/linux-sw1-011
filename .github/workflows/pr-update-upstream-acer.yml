@@ -1,76 +1,48 @@
-name: Update Upstream-Acer from mirrors
+name: PR upstreams → Upstream-Acer
 
 on:
-  workflow_dispatch:
   schedule:
-    - cron: "0 5 */5 * *" # cada 5 días, después del sync de mirrors
+    - cron: "30 */12 * * *"
+  workflow_dispatch:
 
 jobs:
-  update-upstream-acer:
+  torvalds:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Configure git
-        run: |
-          git config user.name "Bastián Almendras"
-          git config user.email "bastian.almendras96@gmail.com"
-
-      - name: Fetch all branches
-        run: |
-          git fetch origin
-          git fetch origin torvalds-base sunxi-base Upstream-Acer
-
-      - name: Create update branch from Upstream-Acer
-        run: |
-          git checkout -B update-upstream-acer origin/Upstream-Acer
-
-      - name: Merge torvalds-base
-        run: |
-          git merge origin/torvalds-base --no-edit || true
-
-      - name: Merge sunxi-base
-        run: |
-          git merge origin/sunxi-base --no-edit || true
-
-      - name: Ensure Acer-specific commits are present
-        run: |
-          git cherry-pick fdcd232bb2c4099c95ae70b4f3909a30f7571835 || true
-          git cherry-pick cf69ed92412b9c0e0276c57983e4fc261fa8835e || true
-
-      - name: Check if there are changes
-        id: changes
-        run: |
-          if git diff --quiet origin/Upstream-Acer; then
-            echo "has_changes=false" >> $GITHUB_OUTPUT
-          else
-            echo "has_changes=true" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Push update branch
-        if: steps.changes.outputs.has_changes == 'true'
-        run: |
-          git push origin update-upstream-acer --force
-
-      - name: Create Pull Request
-        if: steps.changes.outputs.has_changes == 'true'
+      - name: PR torvalds → Upstream-Acer
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: update-upstream-acer
           base: Upstream-Acer
-          title: "kernel: sync torvalds + sunxi"
+          branch: torvalds-base
+          title: "sync: torvalds → Upstream-Acer"
           body: |
-            Automated update of Upstream-Acer.
-
-            This PR includes:
-            - Latest changes from torvalds/linux (torvalds-base)
-            - Latest changes from jwrdegoede/linux-sunxi (sunxi-base)
-            - Preserves Acer-specific patches
-
-            Generated automatically by GitHub Actions.
+            Sync automático desde torvalds/linux.
+          labels: torvalds, upstream
           signoff: true
+          auto-merge: true
+          merge-method: merge
+
+  sunxi:
+    runs-on: ubuntu-latest
+    needs: torvalds
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: PR sunxi → Upstream-Acer
+        uses: peter-evans/create-pull-request@v6
+        with:
+          base: Upstream-Acer
+          branch: sunxi-base
+          title: "sync: sunxi → Upstream-Acer"
+          body: |
+            Sync automático desde jwrdegoede/linux-sunxi.
+          labels: sunxi, upstream
+          signoff: true
+          auto-merge: true
+          merge-method: merge
