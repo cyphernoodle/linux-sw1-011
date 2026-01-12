@@ -51,9 +51,9 @@ CONFIG_TASK_IO_ACCOUNTING=y
 # CPU/SMP - OPTIMIZADO PARA Z8300 (4 cores, NO hyperthreading)
 # ==============================================================================
 CONFIG_SMP=y
-CONFIG_NR_CPUS=4            # ✅ SOLO 4 CPUs (no 8192!)
-# CONFIG_MAXSMP is not set      # ❌ DESACTIVADO (era el gran problema)
-CONFIG_X86_INTEL_LPSS=y     # Low Power Subsystem (necesario para Z8300)
+CONFIG_NR_CPUS=4
+# CONFIG_MAXSMP is not set
+CONFIG_X86_INTEL_LPSS=y
 
 # NO virtualización (ahorra RAM)
 # CONFIG_HYPERVISOR_GUEST is not set
@@ -192,9 +192,6 @@ CONFIG_BLK_INLINE_ENCRYPTION=y
 # I/O Schedulers (BFQ es mejor para interactividad)
 CONFIG_IOSCHED_BFQ=y
 CONFIG_BFQ_GROUP_IOSCHED=y
-# Default: BFQ para eMMC
-
-CONFIG_BINFMT_MISC=m
 
 # ==============================================================================
 # EXECUTABLE FORMATS
@@ -329,7 +326,6 @@ CONFIG_MMC_SDHCI_PLTFM=y
 CONFIG_HID=y
 CONFIG_HID_BATTERY_STRENGTH=y
 CONFIG_HIDRAW=y
-CONFIG_HID_GENERIC=y
 
 # HID Drivers comunes
 CONFIG_HID_A4TECH=m
@@ -344,15 +340,18 @@ CONFIG_HID_MULTITOUCH=m
 # ==============================================================================
 # USB - SOLO USB 2.0 (tu tablet NO tiene USB 3.0)
 # ==============================================================================
+CONFIG_USB_SUPPORT=y
+CONFIG_USB_COMMON=y
 CONFIG_USB=y
 CONFIG_USB_ANNOUNCE_NEW_DEVICES=y
 CONFIG_USB_MON=y
 
 # USB 2.0 ONLY
-# CONFIG_USB_XHCI_HCD is not set     # ❌ NO USB 3.0
-CONFIG_USB_EHCI_HCD=y       # ✅ USB 2.0 High Speed
+CONFIG_USB_EHCI_HCD=y
 CONFIG_USB_EHCI_ROOT_HUB_TT=y
-CONFIG_USB_OHCI_HCD=y       # ✅ USB 2.0 Full/Low Speed
+CONFIG_USB_EHCI_TT_NEWSCHED=y
+CONFIG_USB_OHCI_HCD=y
+CONFIG_USB_OHCI_HCD_PCI=y
 CONFIG_USB_UHCI_HCD=y
 
 # USB Network adapters (para TP-Link UE306)
@@ -361,10 +360,10 @@ CONFIG_USB_USBNET=y
 
 # TP-Link UE306 - Soporta AMBOS chipsets posibles
 CONFIG_USB_NET_AX8817X=m
-CONFIG_USB_NET_AX88179_178A=y       # ✅ ASIX AX88179 (TU DONGLE - alternativa)
+CONFIG_USB_NET_AX88179_178A=y
 CONFIG_USB_RTL8150=m
-CONFIG_USB_RTL8152=y                # ✅ Realtek RTL8152/RTL8153 (TU DONGLE - principal)
-CONFIG_USB_RTL8153_ECM=y            # ✅ ECM support para RTL8153
+CONFIG_USB_RTL8152=y
+CONFIG_USB_RTL8153_ECM=y
 
 # CDC Ethernet (base necesaria)
 CONFIG_USB_NET_CDCETHER=y
@@ -626,9 +625,7 @@ CONFIG_TMPFS=y
 CONFIG_TMPFS_POSIX_ACL=y
 CONFIG_TMPFS_INODE64=y
 
-CONFIG_PROC_KCORE=y
 CONFIG_KERNFS=y
-CONFIG_SYSFS=y
 CONFIG_CONFIGFS_FS=y
 
 CONFIG_FUSE_FS=m
@@ -710,9 +707,6 @@ CONFIG_EFIVAR_FS=y
 # ==============================================================================
 CONFIG_UEVENT_HELPER=y
 CONFIG_UEVENT_HELPER_PATH=""
-CONFIG_DEVTMPFS=y
-CONFIG_DEVTMPFS_MOUNT=y
-CONFIG_DEVTMPFS_SAFE=y
 CONFIG_STANDALONE=y
 CONFIG_PREVENT_FIRMWARE_BUILD=y
 
