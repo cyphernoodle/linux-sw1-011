@@ -8724,7 +8724,7 @@
 			reg = <0x0 0x17410000 0x0 0x1000>;
 			clocks = <&sleep_clk>;
 			interrupts = <GIC_SPI 0 IRQ_TYPE_EDGE_RISING>;
-			status = "reserved"; /* Accessible in EL2 only */
+			status = "reserved"; /* Reserved by Gunyah */
 		};
 
 		cpucp_mbox: mailbox@17430000 {
