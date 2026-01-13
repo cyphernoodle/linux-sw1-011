@@ -1,0 +1,76 @@
+name: Kernel Mirror Sync & Automerge
+
+on:
+  schedule:
+    # Se ejecuta cada viernes a las 00:00 UTC
+    - cron: '0 0 * * 5'
+  workflow_dispatch: # Botón manual para probarlo ahora mismo
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-upstreams:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Descarga todo el historial para evitar errores de merge
+
+      - name: Configure Git Identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync Mirror Branches
+        run: |
+          # --- Sincronizar torvalds-base ---
+          git remote add torvalds https://github.com/torvalds/linux.git
+          git fetch torvalds master
+          git checkout torvalds-base
+          git reset --hard torvalds/master
+          git push origin torvalds-base --force
+
+          # --- Sincronizar sunxi-base ---
+          git remote add jwredegoede https://github.com/jwrdegoede/linux.git
+          git fetch jwredegoede sunxi-base
+          git checkout sunxi-base
+          git reset --hard jwredegoede/sunxi-base
+          git push origin sunxi-base --force
+
+      - name: Create and Auto-merge PRs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for branch in "torvalds-base" "sunxi-base"; do
+            echo "Analizando cambios para integrar $branch en Upstream-Acer..."
+            
+            # Verificar si hay diferencias reales entre la rama base y Upstream-Acer
+            git checkout Upstream-Acer
+            git fetch origin
+            
+            if [ $(git rev-list --count Upstream-Acer..origin/$branch) -eq 0 ]; then
+              echo "No hay cambios nuevos en $branch. Saltando..."
+              continue
+            fi
+
+            # Intentar crear el Pull Request
+            PR_URL=$(gh pr create \
+              --base Upstream-Acer \
+              --head $branch \
+              --title "Sync: $branch a Upstream-Acer" \
+              --body "Sincronización automática del kernel original. Si no hay conflictos, se mezclará solo." \
+              2>/dev/null || echo "exists")
+
+            if [ "$PR_URL" = "exists" ]; then
+              PR_URL=$(gh pr list --head $branch --base Upstream-Acer --json url --jq '.[0].url')
+            fi
+
+            # Intentar auto-merge (solo si no hay conflictos)
+            if [ -n "$PR_URL" ] && [ "$PR_URL" != "null" ]; then
+              echo "Intentando merge automático de $PR_URL..."
+              gh pr merge $PR_URL --merge --auto || echo "⚠️ Conflictos en $branch. Se requiere intervención manual."
+            fi
+          done
