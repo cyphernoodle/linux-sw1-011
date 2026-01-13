@@ -4,7 +4,7 @@ on:
   schedule:
     # Se ejecuta cada viernes a las 00:00 UTC
     - cron: '0 0 * * 5'
-  workflow_dispatch: # Botón manual para probarlo ahora mismo
+  workflow_dispatch: # Permite ejecución manual para pruebas
 
 permissions:
   contents: write
@@ -17,7 +17,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0 # Descarga todo el historial para evitar errores de merge
+          fetch-depth: 0 
 
       - name: Configure Git Identity
         run: |
@@ -26,51 +26,56 @@ jobs:
 
       - name: Sync Mirror Branches
         run: |
-          # --- Sincronizar torvalds-base ---
+          # --- 1. Sincronizar torvalds-base (Mirror de Torvalds master) ---
+          echo "Sincronizando con Torvalds..."
           git remote add torvalds https://github.com/torvalds/linux.git
           git fetch torvalds master
           git checkout torvalds-base
           git reset --hard torvalds/master
           git push origin torvalds-base --force
 
-          # --- Sincronizar sunxi-base ---
-          git remote add jwredegoede https://github.com/jwrdegoede/linux.git
-          git fetch jwredegoede sunxi-base
+          # --- 2. Sincronizar sunxi-base (Mirror de Hans main) ---
+          echo "Sincronizando con Hans de Goede (main)..."
+          git remote add jwr-sunxi https://github.com/jwrdegoede/linux-sunxi.git
+          git fetch jwr-sunxi main
           git checkout sunxi-base
-          git reset --hard jwredegoede/sunxi-base
+          git reset --hard jwr-sunxi/main
           git push origin sunxi-base --force
 
-      - name: Create and Auto-merge PRs
+      - name: Create and Auto-merge PRs to Upstream-Acer
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          for branch in "torvalds-base" "sunxi-base"; do
-            echo "Analizando cambios para integrar $branch en Upstream-Acer..."
+          # Lista de tus ramas espejo que deben ir a Upstream-Acer
+          BRANCHES=("torvalds-base" "sunxi-base")
+
+          for branch in "${BRANCHES[@]}"; do
+            echo "Comparando $branch con Upstream-Acer..."
             
-            # Verificar si hay diferencias reales entre la rama base y Upstream-Acer
             git checkout Upstream-Acer
             git fetch origin
             
+            # Verificamos si la rama espejo tiene commits que no están en Upstream-Acer
             if [ $(git rev-list --count Upstream-Acer..origin/$branch) -eq 0 ]; then
-              echo "No hay cambios nuevos en $branch. Saltando..."
+              echo "No hay cambios nuevos en $branch. Saltando."
               continue
             fi
 
-            # Intentar crear el Pull Request
+            echo "Creando Pull Request para $branch..."
             PR_URL=$(gh pr create \
               --base Upstream-Acer \
               --head $branch \
               --title "Sync: $branch a Upstream-Acer" \
-              --body "Sincronización automática del kernel original. Si no hay conflictos, se mezclará solo." \
+              --body "Actualización automática del kernel original. Mezcla automática si no hay conflictos." \
               2>/dev/null || echo "exists")
 
             if [ "$PR_URL" = "exists" ]; then
               PR_URL=$(gh pr list --head $branch --base Upstream-Acer --json url --jq '.[0].url')
             fi
 
-            # Intentar auto-merge (solo si no hay conflictos)
             if [ -n "$PR_URL" ] && [ "$PR_URL" != "null" ]; then
-              echo "Intentando merge automático de $PR_URL..."
-              gh pr merge $PR_URL --merge --auto || echo "⚠️ Conflictos en $branch. Se requiere intervención manual."
+              echo "Intentando merge automático en $PR_URL..."
+              # --merge crea un commit de merge. --auto activa el automerge de GitHub.
+              gh pr merge $PR_URL --merge --auto || echo "⚠️ Conflictos en $branch. Detenido para revisión manual."
             fi
           done
