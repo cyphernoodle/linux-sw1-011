@@ -2349,6 +2349,18 @@ static int mt9m114_verify_link_frequency(struct mt9m114 *sensor,
 	return 0;
 }
 
+/*
+ * Based on the docs the PLL is believed to have the following setup:
+ *
+ *         +-----+     +-----+     +-----+     +-----+     +-----+
+ * Fin --> | / N | --> | x M | --> | x 2 | --> | / P | --> | / 2 | -->
+ *         +-----+     +-----+     +-----+     +-----+     +-----+
+ *                                         fBit       fWord       fSensor
+ * ext_clock    int_clock   out_clock                             pix_clock
+ *
+ * The MT9M114 docs give a max fBit rate of 768 MHz which translates to
+ * an out_clock_max of 384 MHz.
+ */
 static int mt9m114_clk_init(struct mt9m114 *sensor)
 {
 	static const struct aptina_pll_limits limits = {
@@ -2396,7 +2408,7 @@ static int mt9m114_clk_init(struct mt9m114 *sensor)
 	if (ret)
 		return ret;
 
-	pixrate = clk_get_rate(sensor->clk) * sensor->pll.m
+	pixrate = sensor->pll.ext_clock * sensor->pll.m
 		/ (sensor->pll.n * sensor->pll.p1);
 	if (mt9m114_verify_link_frequency(sensor, pixrate) == 0) {
 		sensor->pixrate = pixrate;
@@ -2553,8 +2565,8 @@ static int mt9m114_probe(struct i2c_client *client)
 	/*
 	 * Identify the sensor. The driver supports runtime PM, but needs to
 	 * work when runtime PM is disabled in the kernel. To that end, power
-	 * the sensor on manually here and identify it to reach the same state
-	 * as if resumed through runtime PM.
+	 * the sensor on manually here to reach the same state as if resumed
+	 * through runtime PM.
 	 */
 	ret = mt9m114_power_on(sensor);
 	if (ret < 0) {

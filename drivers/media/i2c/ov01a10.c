@@ -54,7 +54,7 @@
 /* analog gain controls */
 #define OV01A10_REG_ANALOG_GAIN		CCI_REG16(0x3508)
 #define OV01A10_ANAL_GAIN_MIN		0x100
-#define OV01A10_ANAL_GAIN_MAX		0xfff
+#define OV01A10_ANAL_GAIN_MAX		0x3fff
 #define OV01A10_ANAL_GAIN_STEP		1
 
 /* digital gain controls */
@@ -216,7 +216,7 @@ static const char * const ov01a10_test_pattern_menu[] = {
 	"Disabled",
 	"Color Bar",
 	"Left-Right Darker Color Bar",
-	"Top-Bottom Darker Color Bar",
+	"Bottom-Top Darker Color Bar",
 };
 
 static const s64 link_freq_menu_items[] = {
@@ -864,7 +864,7 @@ static int ov01a10_get_pm_resources(struct ov01a10 *ov01a10)
 				     "getting reset gpio\n");
 
 	ov01a10->powerdown = devm_gpiod_get_optional(ov01a10->dev, "powerdown",
-						     GPIOD_OUT_HIGH);
+						 GPIOD_OUT_HIGH);
 	if (IS_ERR(ov01a10->powerdown))
 		return dev_err_probe(ov01a10->dev, PTR_ERR(ov01a10->powerdown),
 				     "getting powerdown gpio\n");
