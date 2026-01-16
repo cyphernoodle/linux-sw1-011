@@ -1,0 +1,37 @@
+name: Sync kernel mirror branches
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 3 * * *"   # una vez al día, puedes cambiarlo
+
+jobs:
+  sync-mirrors:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository (no working branches)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Add upstream remotes
+        run: |
+          git remote add torvalds https://github.com/torvalds/linux.git || true
+          git remote add sunxi https://github.com/jwrdegoede/linux-sunxi.git || true
+
+      # --- TORVALDS ---
+      - name: Sync torvalds-base
+        run: |
+          git fetch torvalds master
+          git checkout torvalds-base
+          git reset --hard FETCH_HEAD
+          git push origin torvalds-base --force
+
+      # --- SUNXI ---
+      - name: Sync sunxi-base
+        run: |
+          git fetch sunxi main
+          git checkout sunxi-base
+          git reset --hard FETCH_HEAD
+          git push origin sunxi-base --force
