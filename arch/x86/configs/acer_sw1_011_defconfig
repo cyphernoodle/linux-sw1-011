@@ -435,6 +435,8 @@ CONFIG_FRAMEBUFFER_CONSOLE_ROTATION=y
 # Backlight
 CONFIG_BACKLIGHT_CLASS_DEVICE=y
 CONFIG_BACKLIGHT_PWM=m
+CONFIG_PWM_LPSS=m
+CONFIG_PWM_LPSS_PLATFORM=m
 
 # ==============================================================================
 # TTY/SERIAL
