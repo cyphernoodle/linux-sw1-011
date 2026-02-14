@@ -186,7 +186,6 @@ static const struct reg_sequence ov01a10_global_setting[] = {
 	{0x4800, 0x64},
 	{0x481f, 0x34},
 	{0x4825, 0x33},
-	{0x4837, 0x11},
 	{0x4881, 0x40},
 	{0x4883, 0x01},
 	{0x4890, 0x00},
@@ -201,6 +200,17 @@ static const struct reg_sequence ov01a10_global_setting[] = {
 	{0x5004, 0x00},
 	{0x5080, 0x40},
 	{0x0325, 0xc2},
+};
+
+static const struct reg_sequence ov01a10_regs[] = {
+	{0x3822, 0x13},
+	{0x4837, 0x11},
+};
+
+static const struct reg_sequence ov01a1s_regs[] = {
+	{0x3822, 0x03},
+	{0x4837, 0x14},
+	{0x373d, 0x24},
 };
 
 static const char * const ov01a10_test_pattern_menu[] = {
