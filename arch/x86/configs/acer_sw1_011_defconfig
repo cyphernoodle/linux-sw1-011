@@ -1,0 +1,780 @@
+# ==============================================================================
+# ACER SWITCH ONE 10 (SW1-011) - DEFCONFIG ULTRA-OPTIMIZADO
+# ==============================================================================
+# Hardware: Intel Atom x5-Z8300 (4 cores), 2GB RAM, 32-64GB eMMC
+# Optimizado para: Máximo rendimiento, mínimo uso de RAM
+# ==============================================================================
+
+# CONFIG_LOCALVERSION_AUTO is not set
+CONFIG_KERNEL_ZSTD=y
+CONFIG_DEFAULT_HOSTNAME="sw1-011"
+
+# ==============================================================================
+# SCHEDULER - Optimizado para 4 cores Atom
+# ==============================================================================
+CONFIG_SYSVIPC=y
+CONFIG_POSIX_MQUEUE=y
+CONFIG_NO_HZ=y
+CONFIG_HIGH_RES_TIMERS=y
+CONFIG_PREEMPT_VOLUNTARY=y  # Balance entre responsividad y throughput
+CONFIG_SCHED_CORE=y
+CONFIG_SCHED_AUTOGROUP=y    # Mejor interactividad
+CONFIG_SCHED_MC=y           # Multi-Core scheduler (CRÍTICO para 4 cores)
+
+# BPF (necesario para networking moderno)
+CONFIG_BPF_JIT=y
+CONFIG_BPF_JIT_ALWAYS_ON=y
+
+# CGROUPS (mínimo necesario)
+CONFIG_CGROUPS=y
+CONFIG_MEMCG=y
+CONFIG_BLK_CGROUP=y
+CONFIG_CGROUP_SCHED=y
+CONFIG_CFS_BANDWIDTH=y
+CONFIG_FAIR_GROUP_SCHED=y
+CONFIG_CGROUP_PIDS=y
+CONFIG_CGROUP_FREEZER=y
+CONFIG_CPUSETS=y
+CONFIG_CGROUP_CPUACCT=y
+CONFIG_CGROUP_DEVICE=y
+
+# PSI (Pressure Stall Information - útil para monitoreo)
+CONFIG_PSI=y
+
+# Accounting (ligero)
+CONFIG_TASKSTATS=y
+CONFIG_TASK_DELAY_ACCT=y
+CONFIG_TASK_XACCT=y
+CONFIG_TASK_IO_ACCOUNTING=y
+
+# ==============================================================================
+# CPU/SMP - OPTIMIZADO PARA Z8300 (4 cores, NO hyperthreading)
+# ==============================================================================
+CONFIG_SMP=y
+CONFIG_NR_CPUS=4
+# CONFIG_MAXSMP is not set
+CONFIG_X86_INTEL_LPSS=y
+
+# NO virtualización (ahorra RAM)
+# CONFIG_HYPERVISOR_GUEST is not set
+# CONFIG_PARAVIRT is not set
+# CONFIG_PARAVIRT_SPINLOCKS is not set
+# CONFIG_KVM is not set
+# CONFIG_VHOST_NET is not set
+
+# CPU Features
+CONFIG_X86_FRED=y           # Nuevo feature de Intel
+CONFIG_PROCESSOR_SELECT=y
+CONFIG_CPU_SUP_INTEL=y
+CONFIG_MATOM=y              # ✅ CRÍTICO para Atom
+# CONFIG_CPU_SUP_AMD is not set
+
+# Frequency scaling (importante para batería)
+CONFIG_CPU_FREQ=y
+CONFIG_CPU_FREQ_STAT=y
+CONFIG_CPU_FREQ_DEFAULT_GOV_SCHEDUTIL=y
+CONFIG_CPU_FREQ_GOV_PERFORMANCE=m
+CONFIG_CPU_FREQ_GOV_POWERSAVE=m
+CONFIG_CPU_FREQ_GOV_ONDEMAND=m
+CONFIG_CPU_IDLE=y
+CONFIG_CPU_IDLE_GOV_TEO=y   # Modern governor
+CONFIG_INTEL_IDLE=y         # ✅ CRÍTICO para Atom
+
+# Microcode
+CONFIG_MICROCODE=y
+CONFIG_MICROCODE_INTEL=y
+# CONFIG_MICROCODE_AMD is not set
+
+# Thermal
+CONFIG_THERMAL=y
+CONFIG_THERMAL_STATISTICS=y
+CONFIG_THERMAL_GOV_STEP_WISE=y
+CONFIG_THERMAL_GOV_USER_SPACE=y
+CONFIG_INTEL_POWERCLAMP=m
+CONFIG_X86_PKG_TEMP_THERMAL=m
+CONFIG_INTEL_SOC_DTS_THERMAL=m
+CONFIG_INT3406_THERMAL=m
+CONFIG_INTEL_BXT_PMIC_THERMAL=m
+CONFIG_INTEL_PCH_THERMAL=m
+
+# ==============================================================================
+# MEMORY MANAGEMENT - CRÍTICO PARA 2GB RAM
+# ==============================================================================
+CONFIG_ZSWAP=y              # ✅ Compresión de swap en RAM
+CONFIG_ZSWAP_DEFAULT_ON=y
+CONFIG_ZPOOL=y
+CONFIG_ZBUD=y
+CONFIG_Z3FOLD=y
+CONFIG_ZSMALLOC=y
+CONFIG_ZRAM=m               # ✅ Swap comprimido (muy útil con 2GB)
+
+# SLUB allocator (mejor para sistemas pequeños)
+CONFIG_SLUB=y
+# CONFIG_SLAB is not set
+CONFIG_SLUB_CPU_PARTIAL=y
+CONFIG_SLAB_MERGE_DEFAULT=y
+CONFIG_SLAB_FREELIST_RANDOM=y
+CONFIG_SLAB_FREELIST_HARDENED=y
+
+# Memory features
+CONFIG_MEMORY_HOTPLUG=y
+CONFIG_MEMORY_HOTREMOVE=y
+CONFIG_KSM=y                # Kernel Samepage Merging (ahorra RAM)
+CONFIG_TRANSPARENT_HUGEPAGE=y
+CONFIG_TRANSPARENT_HUGEPAGE_MADVISE=y
+CONFIG_COMPACTION=y
+CONFIG_MIGRATION=y
+CONFIG_CMA=y
+CONFIG_CMA_SYSFS=y
+CONFIG_CMA_AREAS=7
+CONFIG_ZONE_DEVICE=y
+
+# LRU (mejora gestión de memoria)
+CONFIG_LRU_GEN=y
+CONFIG_LRU_GEN_ENABLED=y
+
+# ==============================================================================
+# POWER MANAGEMENT - Crítico para batería
+# ==============================================================================
+CONFIG_PM=y
+CONFIG_PM_SLEEP=y
+CONFIG_PM_RUNTIME=y
+CONFIG_PM_AUTOSLEEP=y
+CONFIG_PM_WAKELOCKS=y
+CONFIG_SUSPEND=y
+CONFIG_HIBERNATION=y
+CONFIG_PM_STD_PARTITION=""
+CONFIG_ENERGY_MODEL=y
+
+# ACPI
+CONFIG_ACPI=y
+CONFIG_ACPI_PROCESSOR=y
+CONFIG_ACPI_THERMAL=y
+CONFIG_ACPI_BATTERY=y
+CONFIG_ACPI_AC=y
+CONFIG_ACPI_FAN=y
+CONFIG_ACPI_VIDEO=y
+CONFIG_ACPI_DOCK=y
+CONFIG_ACPI_TAD=m
+CONFIG_ACPI_DPTF=y          # Dynamic Platform and Thermal Framework
+CONFIG_ACPI_BGRT=y
+CONFIG_ACPI_HOTPLUG_MEMORY=y
+
+# PMIC (Power Management IC para Cherry Trail)
+CONFIG_PMIC_OPREGION=y
+CONFIG_BYTCRC_PMIC_OPREGION=y
+CONFIG_CHTCRC_PMIC_OPREGION=y
+CONFIG_CHT_WC_PMIC_OPREGION=y
+
+# ==============================================================================
+# MODULES
+# ==============================================================================
+CONFIG_MODULES=y
+CONFIG_MODULE_UNLOAD=y
+CONFIG_MODPROBE_PATH="/usr/sbin/modprobe"
+
+# ==============================================================================
+# BLOCK LAYER - Optimizado para eMMC
+# ==============================================================================
+CONFIG_BLOCK=y
+CONFIG_BLK_DEV_LOOP=m
+CONFIG_BLK_DEV_LOOP_MIN_COUNT=0
+CONFIG_BLK_DEV_RAM=m
+CONFIG_BLK_DEV_RAM_SIZE=16384
+CONFIG_BLK_DEV_ZONED=y
+CONFIG_BLK_DEV_THROTTLING=y
+CONFIG_BLK_WBT=y
+CONFIG_BLK_CGROUP_IOLATENCY=y
+CONFIG_BLK_CGROUP_IOCOST=y
+CONFIG_BLK_CGROUP_IOPRIO=y
+CONFIG_BLK_INLINE_ENCRYPTION=y
+
+# I/O Schedulers (BFQ es mejor para interactividad)
+CONFIG_IOSCHED_BFQ=y
+CONFIG_BFQ_GROUP_IOSCHED=y
+
+# ==============================================================================
+# EXECUTABLE FORMATS
+# ==============================================================================
+CONFIG_BINFMT_ELF=y
+CONFIG_BINFMT_SCRIPT=y
+CONFIG_BINFMT_MISC=m
+CONFIG_IA32_EMULATION=y
+
+# ==============================================================================
+# NETWORKING - Esencial para tablet
+# ==============================================================================
+CONFIG_NET=y
+CONFIG_PACKET=y
+CONFIG_UNIX=y
+CONFIG_XFRM_USER=y
+CONFIG_INET=y
+CONFIG_IP_PNP=y
+CONFIG_IP_PNP_DHCP=y
+CONFIG_IP_MULTICAST=y
+CONFIG_IP_ADVANCED_ROUTER=y
+CONFIG_IP_MULTIPLE_TABLES=y
+CONFIG_IP_ROUTE_MULTIPATH=y
+CONFIG_NET_IPIP=m
+CONFIG_NET_IPGRE=m
+CONFIG_IP_MROUTE=y
+CONFIG_NET_FOU_IP_TUNNELS=y
+
+# MII support (necesario para USB ethernet)
+CONFIG_MII=y
+CONFIG_PHYLIB=y
+
+# TCP optimizations
+CONFIG_TCP_CONG_ADVANCED=y
+CONFIG_TCP_CONG_BBR=m       # Google BBR (mejor para WiFi)
+CONFIG_DEFAULT_BBR=y
+CONFIG_TCP_MD5SIG=y
+
+# IPv6
+CONFIG_IPV6=y
+CONFIG_IPV6_ROUTER_PREF=y
+CONFIG_IPV6_ROUTE_INFO=y
+CONFIG_IPV6_OPTIMISTIC_DAD=y
+CONFIG_IPV6_MULTIPLE_TABLES=y
+CONFIG_IPV6_SUBTREES=y
+CONFIG_IPV6_MROUTE=y
+
+# Netfilter (firewall básico)
+CONFIG_NETFILTER=y
+CONFIG_NF_CONNTRACK=m
+CONFIG_NF_CONNTRACK_ZONES=y
+CONFIG_NF_CONNTRACK_EVENTS=y
+CONFIG_NETFILTER_XTABLES=y
+
+# Wireless
+CONFIG_CFG80211=m
+CONFIG_CFG80211_WEXT=y      # Wireless extensions (legacy pero necesario)
+CONFIG_MAC80211=m
+CONFIG_MAC80211_MESH=y
+CONFIG_RFKILL=m
+CONFIG_RFKILL_GPIO=m
+
+# Bluetooth
+CONFIG_BT=m
+CONFIG_BT_RFCOMM=m
+CONFIG_BT_RFCOMM_TTY=y
+CONFIG_BT_BNEP=m
+CONFIG_BT_HIDP=m
+CONFIG_BT_HCIBTUSB=m
+CONFIG_BT_HCIBTSDIO=m
+CONFIG_BT_HCIUART=m
+CONFIG_BT_HCIUART_BCSP=y
+CONFIG_BT_HCIUART_INTEL=y
+CONFIG_BT_HCIUART_BCM=y
+CONFIG_BT_HCIUART_RTL=y
+
+# Network schedulers
+CONFIG_NET_SCHED=y
+CONFIG_NET_SCH_FQ=m         # Fair Queue (necesario para BBR)
+CONFIG_NET_SCH_FQ_CODEL=y   # Buffer bloat prevention
+CONFIG_NET_CLS_BPF=m
+CONFIG_NET_CLS_ACT=y
+
+# ==============================================================================
+# PCI/PCMCIA
+# ==============================================================================
+CONFIG_PCI=y
+CONFIG_PCIEAER=y
+CONFIG_PCIE_DPC=y
+CONFIG_PCIE_PTM=y
+CONFIG_PCI_STUB=y
+CONFIG_HOTPLUG_PCI_ACPI=y
+
+# ==============================================================================
+# FIRMWARE
+# ==============================================================================
+CONFIG_DEVTMPFS=y
+CONFIG_DEVTMPFS_MOUNT=y
+CONFIG_DEVTMPFS_SAFE=y
+CONFIG_FW_LOADER=y
+CONFIG_FW_LOADER_COMPRESS=y
+CONFIG_FW_LOADER_COMPRESS_ZSTD=y
+
+# ==============================================================================
+# SCSI/SATA - Para USB storage y posible expansión
+# ==============================================================================
+CONFIG_SCSI=y
+CONFIG_BLK_DEV_SD=y
+CONFIG_BLK_DEV_SR=y
+CONFIG_CHR_DEV_SG=y
+CONFIG_SCSI_CONSTANTS=y
+CONFIG_SCSI_SCAN_ASYNC=y
+
+# ATA (para eMMC puede ser necesario)
+CONFIG_ATA=y
+CONFIG_SATA_AHCI=y
+CONFIG_ATA_PIIX=y
+
+# ==============================================================================
+# eMMC/SDIO SUPPORT - Tu dispositivo de almacenamiento
+# ==============================================================================
+CONFIG_MMC=y
+CONFIG_MMC_BLOCK=y
+CONFIG_MMC_BLOCK_MINORS=8
+CONFIG_SDIO_UART=m
+CONFIG_MMC_SDHCI=y
+CONFIG_MMC_SDHCI_PCI=y
+CONFIG_MMC_SDHCI_ACPI=y     # ✅ CRÍTICO para eMMC en Cherry Trail
+CONFIG_MMC_SDHCI_PLTFM=y
+
+# HID Support
+CONFIG_HID=y
+CONFIG_HID_BATTERY_STRENGTH=y
+CONFIG_HIDRAW=y
+
+# HID Drivers comunes
+CONFIG_HID_A4TECH=m
+CONFIG_HID_APPLE=m
+CONFIG_HID_CHERRY=m
+CONFIG_HID_CHICONY=m
+CONFIG_HID_LOGITECH=m
+CONFIG_HID_MICROSOFT=m
+CONFIG_HID_MONTEREY=m
+CONFIG_HID_MULTITOUCH=m
+
+# ==============================================================================
+# USB - SOLO USB 2.0 (tu tablet NO tiene USB 3.0)
+# ==============================================================================
+CONFIG_USB_SUPPORT=y
+CONFIG_USB_COMMON=y
+CONFIG_USB=y
+CONFIG_USB_ANNOUNCE_NEW_DEVICES=y
+CONFIG_USB_MON=y
+
+# USB 2.0 ONLY
+CONFIG_USB_EHCI_HCD=y
+CONFIG_USB_EHCI_ROOT_HUB_TT=y
+CONFIG_USB_EHCI_TT_NEWSCHED=y
+CONFIG_USB_OHCI_HCD=y
+CONFIG_USB_OHCI_HCD_PCI=y
+CONFIG_USB_UHCI_HCD=y
+
+# USB Network adapters (para TP-Link UE306)
+CONFIG_USB_NET_DRIVERS=y
+CONFIG_USB_USBNET=y
+
+# TP-Link UE306 - Soporta AMBOS chipsets posibles
+CONFIG_USB_NET_AX8817X=m
+CONFIG_USB_NET_AX88179_178A=y
+CONFIG_USB_RTL8150=m
+CONFIG_USB_RTL8152=y
+CONFIG_USB_RTL8153_ECM=y
+
+# CDC Ethernet (base necesaria)
+CONFIG_USB_NET_CDCETHER=y
+CONFIG_USB_NET_CDC_EEM=m
+CONFIG_USB_NET_CDC_NCM=m
+CONFIG_USB_NET_HUAWEI_CDC_NCM=m
+CONFIG_USB_NET_CDC_MBIM=m
+CONFIG_USB_NET_RNDIS_HOST=m
+
+# Otros adapters USB ethernet comunes (como módulos)
+CONFIG_USB_NET_DM9601=m
+CONFIG_USB_NET_SMSC75XX=m
+CONFIG_USB_NET_SMSC95XX=m
+CONFIG_USB_NET_MCS7830=m
+CONFIG_USB_LAN78XX=m
+
+# USB peripherals (comunes)
+CONFIG_USB_STORAGE=y
+CONFIG_USB_UAS=y
+CONFIG_USB_SERIAL=y
+CONFIG_USB_SERIAL_GENERIC=y
+CONFIG_USB_SERIAL_FTDI_SIO=y
+CONFIG_USB_SERIAL_PL2303=y
+
+# USB HID
+CONFIG_USB_HID=y
+CONFIG_HID_GENERIC=y
+CONFIG_USB_HIDDEV=y
+
+# ==============================================================================
+# REALTEK RTL8723BS - Tu WiFi/Bluetooth
+# ==============================================================================
+CONFIG_WLAN=y
+CONFIG_RTL8723BS=m          # ✅ TU WIFI
+
+# Desactivar TODOS los otros drivers WiFi
+# CONFIG_ATH5K is not set
+# CONFIG_ATH9K is not set
+# CONFIG_ATH10K is not set
+# CONFIG_IWLWIFI is not set
+# CONFIG_BRCMFMAC is not set
+# CONFIG_RT2X00 is not set
+
+# ==============================================================================
+# GRAPHICS - Intel HD Graphics (Cherry Trail)
+# ==============================================================================
+CONFIG_AGP=y
+CONFIG_AGP_INTEL=y
+CONFIG_VGA_SWITCHEROO=y
+CONFIG_DRM=y
+CONFIG_DRM_SIMPLEDRM=y
+
+# Intel GPU (TU GPU)
+CONFIG_DRM_I915=m
+CONFIG_DRM_I915_PXP=y
+
+# Desactivar GPUs que NO tienes
+# CONFIG_DRM_NOUVEAU is not set    # ❌ NO Nvidia
+# CONFIG_DRM_RADEON is not set     # ❌ NO AMD
+# CONFIG_DRM_AMDGPU is not set     # ❌ NO AMD
+
+# Framebuffer
+CONFIG_FB=y
+CONFIG_FB_VESA=y
+CONFIG_FB_EFI=y
+CONFIG_FRAMEBUFFER_CONSOLE=y
+CONFIG_FRAMEBUFFER_CONSOLE_ROTATION=y
+
+# Backlight
+CONFIG_BACKLIGHT_CLASS_DEVICE=y
+CONFIG_BACKLIGHT_PWM=m
+
+# ==============================================================================
+# TTY/SERIAL
+# ==============================================================================
+CONFIG_TTY=y
+CONFIG_VT=y
+CONFIG_VT_CONSOLE=y
+CONFIG_VT_HW_CONSOLE_BINDING=y
+CONFIG_UNIX98_PTYS=y
+# CONFIG_LEGACY_PTYS is not set
+
+CONFIG_SERIAL_8250=y
+CONFIG_SERIAL_8250_CONSOLE=y
+CONFIG_SERIAL_8250_PCI=y
+CONFIG_SERIAL_8250_NR_UARTS=4
+CONFIG_SERIAL_8250_RUNTIME_UARTS=4
+
+# ==============================================================================
+# INPUT DEVICES - Touchscreen + Keyboard
+# ==============================================================================
+CONFIG_INPUT=y
+CONFIG_INPUT_MOUSEDEV=y
+CONFIG_INPUT_EVDEV=y
+
+# Touchscreen (CRÍTICO para tablet)
+CONFIG_INPUT_TOUCHSCREEN=y
+CONFIG_TOUCHSCREEN_GOODIX=m         # Common en Cherry Trail tablets
+CONFIG_TOUCHSCREEN_SILEAD=m         # También común
+CONFIG_TOUCHSCREEN_ELAN=m
+CONFIG_TOUCHSCREEN_ATMEL_MXT=m
+
+# Keyboard/Mouse
+CONFIG_INPUT_KEYBOARD=y
+CONFIG_KEYBOARD_ATKBD=y
+CONFIG_INPUT_MOUSE=y
+CONFIG_MOUSE_PS2=y
+CONFIG_MOUSE_PS2_ELANTECH=y
+
+# Sensors (acelerómetro, etc.)
+CONFIG_INPUT_MISC=y
+CONFIG_INPUT_UINPUT=m
+
+# ==============================================================================
+# I2C (necesario para touchscreen y sensores)
+# ==============================================================================
+CONFIG_I2C=y
+CONFIG_I2C_CHARDEV=m
+CONFIG_I2C_DESIGNWARE_CORE=y
+CONFIG_I2C_DESIGNWARE_PLATFORM=y
+CONFIG_I2C_DESIGNWARE_BAYTRAIL=y    # ✅ Para Cherry Trail
+CONFIG_I2C_DESIGNWARE_PCI=y
+
+# ==============================================================================
+# MFD (Multi-Function Devices) - Para PMIC
+# ==============================================================================
+CONFIG_MFD_CORE=y
+CONFIG_MFD_AXP20X_I2C=y
+CONFIG_INTEL_SOC_PMIC=y
+CONFIG_INTEL_SOC_PMIC_CHTWC=y
+CONFIG_MFD_INTEL_LPSS_ACPI=y
+CONFIG_MFD_INTEL_LPSS_PCI=y
+
+# ==============================================================================
+# REGULATORS (para gestión de voltaje)
+# ==============================================================================
+CONFIG_REGULATOR=y
+CONFIG_REGULATOR_FIXED_VOLTAGE=m
+
+# ==============================================================================
+# GPIO/PINCTRL (necesario para hardware de tablet)
+# ==============================================================================
+CONFIG_PINCTRL=y
+CONFIG_PINCTRL_BAYTRAIL=y           # ✅ CRÍTICO para Cherry Trail
+CONFIG_PINCTRL_CHERRYVIEW=y         # ✅ CRÍTICO para Cherry Trail
+
+CONFIG_GPIOLIB=y
+CONFIG_GPIO_CRYSTAL_COVE=y          # ✅ Para PMIC
+
+# ==============================================================================
+# SOUND - Intel SST (Smart Sound Technology)
+# ==============================================================================
+CONFIG_SOUND=m
+CONFIG_SND=m
+CONFIG_SND_PCM=m
+CONFIG_SND_TIMER=m
+
+# Intel HDA
+CONFIG_SND_HDA=m
+CONFIG_SND_HDA_INTEL=m
+CONFIG_SND_HDA_CODEC_REALTEK=m
+CONFIG_SND_HDA_CODEC_HDMI=m
+
+# Intel SST (para Cherry Trail)
+CONFIG_SND_SOC=m
+CONFIG_SND_SOC_INTEL_SST=m
+CONFIG_SND_SOC_INTEL_BYTCR_RT5640_MACH=m
+CONFIG_SND_SOC_INTEL_BYTCR_RT5651_MACH=m
+CONFIG_SND_SOC_INTEL_CHT_BSW_RT5672_MACH=m
+CONFIG_SND_SOC_INTEL_CHT_BSW_RT5645_MACH=m
+
+# ==============================================================================
+# BATTERY/POWER
+# ==============================================================================
+CONFIG_POWER_SUPPLY=y
+CONFIG_BATTERY_INTEL_DC_TI=m
+CONFIG_AXP288_CHARGER=m
+CONFIG_AXP288_FUEL_GAUGE=m
+
+# ==============================================================================
+# HWMON (sensores de temperatura)
+# ==============================================================================
+CONFIG_HWMON=y
+CONFIG_SENSORS_CORETEMP=m
+
+# ==============================================================================
+# WATCHDOG
+# ==============================================================================
+CONFIG_WATCHDOG=y
+CONFIG_WATCHDOG_CORE=y
+CONFIG_ITCO_WDT=m
+CONFIG_ITCO_VENDOR_SUPPORT=y
+
+# ==============================================================================
+# IIO (Industrial I/O) - Para sensores
+# ==============================================================================
+CONFIG_IIO=m
+CONFIG_HID_SENSOR_HUB=m
+CONFIG_HID_SENSOR_ACCEL_3D=m
+CONFIG_HID_SENSOR_GYRO_3D=m
+CONFIG_HID_SENSOR_ALS=m
+CONFIG_HID_SENSOR_MAGNETOMETER_3D=m
+
+# ==============================================================================
+# MEDIA - Webcam
+# ==============================================================================
+CONFIG_MEDIA_SUPPORT=m
+CONFIG_MEDIA_CAMERA_SUPPORT=y
+CONFIG_MEDIA_USB_SUPPORT=y
+CONFIG_USB_VIDEO_CLASS=m
+
+# Intel ISP (para cámara integrada en Cherry Trail)
+CONFIG_INTEL_ATOMISP=y
+CONFIG_VIDEO_ATOMISP=m
+
+# ==============================================================================
+# LEDS
+# ==============================================================================
+CONFIG_LEDS_CLASS=y
+CONFIG_LEDS_TRIGGER_DISK=y
+CONFIG_LEDS_TRIGGER_HEARTBEAT=m
+
+# ==============================================================================
+# RTC
+# ==============================================================================
+CONFIG_RTC_CLASS=y
+CONFIG_RTC_HCTOSYS=y
+CONFIG_RTC_DRV_CMOS=y
+
+# ==============================================================================
+# PROC/SYSFS
+# ==============================================================================
+CONFIG_PROC_FS=y
+CONFIG_PROC_KCORE=y
+CONFIG_PROC_CHILDREN=y
+CONFIG_SYSFS=y
+CONFIG_SYSFS_SYSCALL=y
+
+# ==============================================================================
+# FILESYSTEMS - Solo lo esencial
+# ==============================================================================
+CONFIG_EXT4_FS=y
+CONFIG_EXT4_FS_POSIX_ACL=y
+CONFIG_EXT4_FS_SECURITY=y
+
+CONFIG_BTRFS_FS=y
+CONFIG_BTRFS_FS_POSIX_ACL=y
+
+CONFIG_F2FS_FS=m            # Óptimo para eMMC/SSD
+CONFIG_F2FS_FS_SECURITY=y
+CONFIG_F2FS_FS_COMPRESSION=y
+
+CONFIG_VFAT_FS=m            # Para USB sticks
+CONFIG_FAT_DEFAULT_IOCHARSET="utf8"
+CONFIG_EXFAT_FS=m
+CONFIG_NTFS3_FS=m           # NTFS moderno
+
+CONFIG_TMPFS=y
+CONFIG_TMPFS_POSIX_ACL=y
+CONFIG_TMPFS_INODE64=y
+
+CONFIG_KERNFS=y
+CONFIG_CONFIGFS_FS=y
+
+CONFIG_FUSE_FS=m
+CONFIG_OVERLAY_FS=m
+
+CONFIG_ISO9660_FS=m
+CONFIG_UDF_FS=m
+
+# Filesystems exóticos DESACTIVADOS
+# CONFIG_XFS_FS is not set
+# CONFIG_JFS_FS is not set
+# CONFIG_GFS2_FS is not set
+# CONFIG_OCFS2_FS is not set
+# CONFIG_NILFS2_FS is not set
+
+# ==============================================================================
+# NLS (Native Language Support)
+# ==============================================================================
+CONFIG_NLS=y
+CONFIG_NLS_DEFAULT="utf8"
+CONFIG_NLS_CODEPAGE_437=y
+CONFIG_NLS_ASCII=y
+CONFIG_NLS_ISO8859_1=m
+CONFIG_NLS_UTF8=m
+
+# ==============================================================================
+# CRYPTO (mínimo necesario)
+# ==============================================================================
+CONFIG_CRYPTO=y
+CONFIG_CRYPTO_AES=y
+CONFIG_CRYPTO_AES_NI_INTEL=y        # ✅ Hardware AES en Z8300
+CONFIG_CRYPTO_SHA256=y
+CONFIG_CRYPTO_DEFLATE=y
+CONFIG_CRYPTO_LZ4=m
+CONFIG_CRYPTO_ZSTD=m
+
+# ==============================================================================
+# IOMMU
+# ==============================================================================
+CONFIG_IOMMU_SUPPORT=y
+CONFIG_INTEL_IOMMU=y
+# CONFIG_INTEL_IOMMU_DEFAULT_ON is not set
+CONFIG_INTEL_IOMMU_SVM=y
+CONFIG_IRQ_REMAP=y
+
+# ==============================================================================
+# SECURITY (básico)
+# ==============================================================================
+CONFIG_SECURITY=y
+CONFIG_SECURITY_NETWORK=y
+CONFIG_SECURITYFS=y
+CONFIG_SECURITY_SELINUX=y
+CONFIG_SECURITY_SELINUX_BOOTPARAM=y
+CONFIG_SECURITY_SELINUX_DEVELOP=y
+CONFIG_SECURITY_SELINUX_AVC_STATS=y
+CONFIG_DEFAULT_SECURITY_SELINUX=y
+CONFIG_LSM="lockdown,yama,integrity,selinux"
+CONFIG_SECURITY_YAMA=y
+
+# ==============================================================================
+# KEYS
+# ==============================================================================
+CONFIG_KEYS=y
+CONFIG_PERSISTENT_KEYRINGS=y
+
+# ==============================================================================
+# EFI
+# ==============================================================================
+CONFIG_EFI=y
+CONFIG_EFI_STUB=y
+CONFIG_EFI_MIXED=y
+CONFIG_EFIVAR_FS=y
+
+# ==============================================================================
+# MISC
+# ==============================================================================
+# ==============================================================================
+# MISC CRITICAL
+# ==============================================================================
+CONFIG_UEVENT_HELPER=y
+CONFIG_UEVENT_HELPER_PATH=""
+CONFIG_STANDALONE=y
+CONFIG_PREVENT_FIRMWARE_BUILD=y
+
+CONFIG_DMA_SHARED_BUFFER=y
+CONFIG_SYNC_FILE=y
+
+CONFIG_MAGIC_SYSRQ=y
+CONFIG_MAGIC_SYSRQ_DEFAULT_ENABLE=0x01b6
+
+# Herz (300Hz es buen balance)
+CONFIG_HZ_300=y
+CONFIG_HZ=300
+
+# ==============================================================================
+# DEBUG - TODO DESACTIVADO para producción
+# ==============================================================================
+# CONFIG_DEBUG_KERNEL is not set
+# CONFIG_DEBUG_INFO is not set
+# CONFIG_DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT is not set
+# CONFIG_DEBUG_INFO_DWARF4 is not set
+# CONFIG_DEBUG_INFO_DWARF5 is not set
+# CONFIG_GDB_SCRIPTS is not set
+CONFIG_DEBUG_INFO_NONE=y
+
+# Tracers DESACTIVADOS (conflicto con -fomit-frame-pointer)
+# CONFIG_FTRACE is not set
+# CONFIG_FUNCTION_TRACER is not set
+# CONFIG_FUNCTION_GRAPH_TRACER is not set
+# CONFIG_STACK_TRACER is not set
+# CONFIG_DYNAMIC_FTRACE is not set
+
+# ==============================================================================
+# FRAME POINTER - Desactivado para rendimiento
+# ==============================================================================
+# CONFIG_FRAME_POINTER is not set
+CONFIG_UNWINDER_ORC=y
+# CONFIG_UNWINDER_FRAME_POINTER is not set
+
+# ==============================================================================
+# LTO/CFI - Desactivado
+# ==============================================================================
+CONFIG_LTO_NONE=y
+# CONFIG_LTO_CLANG_FULL is not set
+# CONFIG_LTO_CLANG_THIN is not set
+# CONFIG_CFI_CLANG is not set
+
+# ==============================================================================
+# RANDSTRUCT - Desactivado
+# ==============================================================================
+CONFIG_RANDSTRUCT_NONE=y
+# CONFIG_RANDSTRUCT_FULL is not set
+# CONFIG_RANDSTRUCT_PERFORMANCE is not set
+
+# ==============================================================================
+# STACK PROTECTION (básico)
+# ==============================================================================
+CONFIG_STACKPROTECTOR=y
+# CONFIG_STACKPROTECTOR_STRONG is not set
+CONFIG_RANDOMIZE_KSTACK_OFFSET_DEFAULT=y
+
+# ==============================================================================
+# PRINTK (mínimo logging)
+# ==============================================================================
+CONFIG_PRINTK=y
+CONFIG_PRINTK_TIME=y
+CONFIG_CONSOLE_LOGLEVEL_DEFAULT=4
+CONFIG_CONSOLE_LOGLEVEL_QUIET=1
+
+# ==============================================================================
+# FIN DEL DEFCONFIG
+# ==============================================================================
