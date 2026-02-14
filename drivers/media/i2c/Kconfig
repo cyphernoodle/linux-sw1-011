@@ -541,6 +541,7 @@ config VIDEO_OV5645
 
 config VIDEO_OV5647
 	tristate "OmniVision OV5647 sensor support"
+	select V4L2_CCI_I2C
 	help
 	  This is a Video4Linux2 sensor driver for the OmniVision
 	  OV5647 camera.
@@ -777,17 +778,15 @@ config VIDEO_S5K6A3
 	  This is a V4L2 sensor driver for Samsung S5K6A3 raw
 	  camera sensor.
 
-config VIDEO_T4KA3
-	tristate "Toshiba T4KA3 sensor support"
-	depends on ACPI || COMPILE_TEST
-	depends on GPIOLIB
+config VIDEO_S5KJN1
+	tristate "Samsung S5KJN1 sensor support"
 	select V4L2_CCI_I2C
 	help
-	  This is a Video4Linux2 sensor driver for the Toshiba T4KA3 8 MP
+	  This is a V4L2 sensor driver for Samsung S5KJN1 50MP raw
 	  camera sensor.
 
 	  To compile this driver as a module, choose M here: the
-	  module will be called t4ka3.
+	  module will be called s5kjn1.
 
 config VIDEO_VD55G1
 	tristate "ST VD55G1 sensor support"
