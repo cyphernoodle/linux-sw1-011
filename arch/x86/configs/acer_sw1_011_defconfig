@@ -20,6 +20,7 @@ CONFIG_PREEMPT_VOLUNTARY=y  # Balance entre responsividad y throughput
 CONFIG_SCHED_CORE=y
 CONFIG_SCHED_AUTOGROUP=y    # Mejor interactividad
 CONFIG_SCHED_MC=y           # Multi-Core scheduler (CRÍTICO para 4 cores)
+CONFIG_HAS_IOMEM=y
 
 # BPF (necesario para networking moderno)
 CONFIG_BPF_JIT=y
@@ -435,8 +436,9 @@ CONFIG_FRAMEBUFFER_CONSOLE_ROTATION=y
 # Backlight
 CONFIG_BACKLIGHT_CLASS_DEVICE=y
 CONFIG_BACKLIGHT_PWM=m
-CONFIG_PWM_LPSS=m
-CONFIG_PWM_LPSS_PLATFORM=m
+CONFIG_PWM=y
+CONFIG_PWM_LPSS=y
+CONFIG_PWM_LPSS_PLATFORM=y
 
 # ==============================================================================
 # TTY/SERIAL
