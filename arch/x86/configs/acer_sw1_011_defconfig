@@ -624,11 +624,11 @@ CONFIG_EXT4_FS_SECURITY=y
 CONFIG_BTRFS_FS=y
 CONFIG_BTRFS_FS_POSIX_ACL=y
 
-CONFIG_F2FS_FS=m            # Óptimo para eMMC/SSD
+CONFIG_F2FS_FS=y            # Óptimo para eMMC/SSD
 CONFIG_F2FS_FS_SECURITY=y
 CONFIG_F2FS_FS_COMPRESSION=y
 
-CONFIG_VFAT_FS=m            # Para USB sticks
+CONFIG_VFAT_FS=y            # Para USB sticks
 CONFIG_FAT_DEFAULT_IOCHARSET="utf8"
 CONFIG_EXFAT_FS=m
 CONFIG_NTFS3_FS=m           # NTFS moderno
@@ -660,8 +660,8 @@ CONFIG_NLS=y
 CONFIG_NLS_DEFAULT="utf8"
 CONFIG_NLS_CODEPAGE_437=y
 CONFIG_NLS_ASCII=y
-CONFIG_NLS_ISO8859_1=m
-CONFIG_NLS_UTF8=m
+CONFIG_NLS_ISO8859_1=y
+CONFIG_NLS_UTF8=y
 
 # ==============================================================================
 # CRYPTO (mínimo necesario)
@@ -686,17 +686,24 @@ CONFIG_INTEL_IOMMU_FLOPPY_WA=y
 CONFIG_IRQ_REMAP=y
 
 # ==============================================================================
-# SECURITY (básico)
+# SECURITY (Optimizado para 2GB RAM - AppArmor en lugar de SELinux)
 # ==============================================================================
 CONFIG_SECURITY=y
+CONFIG_SECURITY_WRITABLE_HOOKS=y
 CONFIG_SECURITY_NETWORK=y
 CONFIG_SECURITYFS=y
-CONFIG_SECURITY_SELINUX=y
-CONFIG_SECURITY_SELINUX_BOOTPARAM=y
-CONFIG_SECURITY_SELINUX_DEVELOP=y
-CONFIG_SECURITY_SELINUX_AVC_STATS=y
-CONFIG_DEFAULT_SECURITY_SELINUX=y
-CONFIG_LSM="lockdown,yama,integrity,selinux"
+
+# Desactivamos SELinux (es muy pesado para un Atom)
+# CONFIG_SECURITY_SELINUX is not set
+
+# Activamos AppArmor (estándar de Arch, mucho más ligero)
+CONFIG_SECURITY_APPARMOR=y
+CONFIG_SECURITY_APPARMOR_HASH=y
+CONFIG_SECURITY_APPARMOR_HASH_SHA256=y
+CONFIG_SECURITY_APPARMOR_INT_COMPAT=y
+
+# Orden de carga de módulos de seguridad
+CONFIG_LSM="landlock,lockdown,yama,integrity,apparmor,bpf"
 CONFIG_SECURITY_YAMA=y
 
 # ==============================================================================
