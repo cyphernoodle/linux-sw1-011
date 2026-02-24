@@ -54,7 +54,7 @@ static struct resource *get_pci_domain_busn_res(int domain_nr)
 		if (r->domain_nr == domain_nr)
 			return &r->res;
 
-	r = kzalloc(sizeof(*r), GFP_KERNEL);
+	r = kzalloc_obj(*r);
 	if (!r)
 		return NULL;
 
@@ -621,7 +621,7 @@ static struct pci_bus *pci_alloc_bus(struct pci_bus *parent)
 {
 	struct pci_bus *b;
 
-	b = kzalloc(sizeof(*b), GFP_KERNEL);
+	b = kzalloc_obj(*b);
 	if (!b)
 		return NULL;
 
@@ -2503,7 +2503,7 @@ struct pci_dev *pci_alloc_dev(struct pci_bus *bus)
 {
 	struct pci_dev *dev;
 
-	dev = kzalloc(sizeof(struct pci_dev), GFP_KERNEL);
+	dev = kzalloc_obj(struct pci_dev);
 	if (!dev)
 		return NULL;
 

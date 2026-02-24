@@ -2073,7 +2073,7 @@ static struct urb *alloc_ctrl_urb(struct hci_dev *hdev, struct sk_buff *skb)
 	if (!urb)
 		return ERR_PTR(-ENOMEM);
 
-	dr = kmalloc(sizeof(*dr), GFP_KERNEL);
+	dr = kmalloc_obj(*dr);
 	if (!dr) {
 		usb_free_urb(urb);
 		return ERR_PTR(-ENOMEM);
@@ -4061,7 +4061,7 @@ static int btusb_probe(struct usb_interface *intf,
 			return -ENODEV;
 	}
 
-	data = kzalloc(sizeof(*data), GFP_KERNEL);
+	data = kzalloc_obj(*data);
 	if (!data)
 		return -ENOMEM;
 
