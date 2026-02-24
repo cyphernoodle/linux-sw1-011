@@ -371,7 +371,7 @@ bool intel_pipe_is_enabled(struct intel_display *display,
 {
 	bool cur_state;
 	enum intel_display_power_domain power_domain;
-	struct ref_tracker *wakeref;
+	intel_wakeref_t wakeref;
 
 	power_domain = POWER_DOMAIN_TRANSCODER(cpu_transcoder);
 	wakeref = intel_display_power_get_if_enabled(display, power_domain);
