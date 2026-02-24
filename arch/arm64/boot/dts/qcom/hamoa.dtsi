@@ -792,8 +792,8 @@
 
 		#address-cells = <2>;
 		#size-cells = <2>;
-		dma-ranges = <0 0 0 0 0x10 0>;
-		ranges = <0 0 0 0 0x10 0>;
+		dma-ranges = <0 0 0 0 0x100 0>;
+		ranges = <0 0 0 0 0x100 0>;
 
 		gcc: clock-controller@100000 {
 			compatible = "qcom,x1e80100-gcc";
@@ -809,6 +809,9 @@
 				 <&usb_1_ss0_qmpphy QMP_USB43DP_USB3_PIPE_CLK>,
 				 <&usb_1_ss1_qmpphy QMP_USB43DP_USB3_PIPE_CLK>,
 				 <&usb_1_ss2_qmpphy QMP_USB43DP_USB3_PIPE_CLK>,
+				 <0>,
+				 <0>,
+				 <0>,
 				 <0>,
 				 <0>,
 				 <0>,
@@ -3061,6 +3064,11 @@
 			};
 		};
 
+		rng: rng@10c3000 {
+			compatible = "qcom,x1e80100-trng", "qcom,trng";
+			reg = <0x0 0x010c3000 0x0 0x1000>;
+		};
+
 		cnoc_main: interconnect@1500000 {
 			compatible = "qcom,x1e80100-cnoc-main";
 			reg = <0 0x01500000 0 0x14400>;
@@ -3162,7 +3170,7 @@
 
 		mmss_noc: interconnect@1780000 {
 			compatible = "qcom,x1e80100-mmss-noc";
-			reg = <0 0x01780000 0 0x5B800>;
+			reg = <0 0x01780000 0 0x5b800>;
 
 			qcom,bcm-voters = <&apps_bcm_voter>;
 
@@ -3253,9 +3261,6 @@
 				      "link_down";
 
 			power-domains = <&gcc GCC_PCIE_3_GDSC>;
-
-			phys = <&pcie3_phy>;
-			phy-names = "pciephy";
 
 			eq-presets-8gts = /bits/ 16 <0x5555 0x5555 0x5555 0x5555
 						     0x5555 0x5555 0x5555 0x5555>;
@@ -3397,11 +3402,13 @@
 				};
 			};
 
-			pcie3_port: pcie@0 {
+			pcie3_port0: pcie@0 {
 				device_type = "pci";
 				compatible = "pciclass,0604";
 				reg = <0x0 0x0 0x0 0x0 0x0>;
 				bus-range = <0x01 0xff>;
+
+				phys = <&pcie3_phy>;
 
 				#address-cells = <3>;
 				#size-cells = <2>;
@@ -3536,8 +3543,7 @@
 
 			status = "disabled";
 
-			pcie6_port0: pcie@0 {
-				compatible = "pciclass,0604";
+			pcie6a_port0: pcie@0 {
 				device_type = "pci";
 				reg = <0x0 0x0 0x0 0x0 0x0>;
 				bus-range = <0x01 0xff>;
@@ -3673,12 +3679,21 @@
 			power-domains = <&gcc GCC_PCIE_5_GDSC>;
 			required-opps = <&rpmhpd_opp_nom>;
 
-			phys = <&pcie5_phy>;
-			phy-names = "pciephy";
-
 			eq-presets-8gts = /bits/ 16 <0x5555 0x5555>;
 
 			status = "disabled";
+
+			pcie5_port0: pcie@0 {
+				device_type = "pci";
+				reg = <0x0 0x0 0x0 0x0 0x0>;
+				bus-range = <0x01 0xff>;
+
+				phys = <&pcie5_phy>;
+
+				#address-cells = <3>;
+				#size-cells = <2>;
+				ranges;
+			};
 		};
 
 		pcie5_phy: phy@1c06000 {
@@ -3814,7 +3829,6 @@
 				bus-range = <0x01 0xff>;
 
 				phys = <&pcie4_phy>;
-				phy-names = "pciephy";
 
 				#address-cells = <3>;
 				#size-cells = <2>;
@@ -3855,6 +3869,32 @@
 			#phy-cells = <0>;
 
 			status = "disabled";
+		};
+
+		cryptobam: dma-controller@1dc4000 {
+			compatible = "qcom,bam-v1.7.4", "qcom,bam-v1.7.0";
+			reg = <0x0 0x01dc4000 0x0 0x28000>;
+			interrupts = <GIC_SPI 272 IRQ_TYPE_LEVEL_HIGH>;
+			#dma-cells = <1>;
+			iommus = <&apps_smmu 0x480 0x0>,
+				 <&apps_smmu 0x481 0x0>;
+			qcom,ee = <0>;
+			qcom,controlled-remotely;
+			num-channels = <20>;
+			qcom,num-ees = <4>;
+		};
+
+		crypto: crypto@1dfa000 {
+			compatible = "qcom,x1e80100-qce", "qcom,sm8150-qce", "qcom,qce";
+			reg = <0x0 0x01dfa000 0x0 0x6000>;
+			dmas = <&cryptobam 4>, <&cryptobam 5>;
+			dma-names = "rx",
+				    "tx";
+			iommus = <&apps_smmu 0x480 0x0>,
+				 <&apps_smmu 0x481 0x0>;
+			interconnects = <&aggre2_noc MASTER_CRYPTO QCOM_ICC_TAG_ALWAYS
+					 &mc_virt SLAVE_EBI1 QCOM_ICC_TAG_ALWAYS>;
+			interconnect-names = "memory";
 		};
 
 		tcsr_mutex: hwlock@1f40000 {
@@ -4148,7 +4188,7 @@
 
 		nsp_noc: interconnect@320c0000 {
 			compatible = "qcom,x1e80100-nsp-noc";
-			reg = <0 0x320C0000 0 0xe080>;
+			reg = <0 0x320c0000 0 0xe080>;
 
 			qcom,bcm-voters = <&apps_bcm_voter>;
 
@@ -4659,7 +4699,7 @@
 
 		lpass_lpicx_noc: interconnect@7430000 {
 			compatible = "qcom,x1e80100-lpass-lpicx-noc";
-			reg = <0 0x07430000 0 0x3A200>;
+			reg = <0 0x07430000 0 0x3a200>;
 
 			qcom,bcm-voters = <&apps_bcm_voter>;
 
@@ -5931,6 +5971,7 @@
 				phy-names = "dp";
 
 				#sound-dai-cells = <0>;
+				sound-name-prefix = "DisplayPort0";
 
 				status = "disabled";
 
@@ -6019,6 +6060,7 @@
 				phy-names = "dp";
 
 				#sound-dai-cells = <0>;
+				sound-name-prefix = "DisplayPort1";
 
 				status = "disabled";
 
@@ -6107,6 +6149,7 @@
 				phy-names = "dp";
 
 				#sound-dai-cells = <0>;
+				sound-name-prefix = "DisplayPort2";
 
 				status = "disabled";
 
@@ -6190,6 +6233,7 @@
 				phy-names = "dp";
 
 				#sound-dai-cells = <0>;
+				sound-name-prefix = "DisplayPort3";
 
 				status = "disabled";
 
@@ -8728,6 +8772,14 @@
 				msi-controller;
 				#msi-cells = <1>;
 			};
+		};
+
+		apss_watchdog: watchdog@17410000 {
+			compatible = "qcom,apss-wdt-x1e80100", "qcom,kpss-wdt";
+			reg = <0x0 0x17410000 0x0 0x1000>;
+			clocks = <&sleep_clk>;
+			interrupts = <GIC_SPI 0 IRQ_TYPE_EDGE_RISING>;
+			status = "reserved"; /* Reserved by Gunyah */
 		};
 
 		cpucp_mbox: mailbox@17430000 {

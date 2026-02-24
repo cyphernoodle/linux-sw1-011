@@ -793,7 +793,7 @@ int blk_trace_setup(struct request_queue *q, char *name, dev_t dev,
 		return PTR_ERR(bt);
 	}
 	blk_trace_setup_finalize(q, name, 1, bt, &buts2);
-	strcpy(buts.name, buts2.name);
+	strscpy(buts.name, buts2.name, BLKTRACE_BDEV_SIZE);
 	mutex_unlock(&q->debugfs_mutex);
 
 	if (copy_to_user(arg, &buts, sizeof(buts))) {
@@ -1832,7 +1832,9 @@ static struct trace_event trace_blk_event = {
 	.funcs		= &trace_blk_event_funcs,
 };
 
-static int __init init_blk_tracer(void)
+static struct work_struct blktrace_works __initdata;
+
+static int __init __init_blk_tracer(void)
 {
 	if (!register_trace_event(&trace_blk_event)) {
 		pr_warn("Warning: could not register block events\n");
@@ -1850,6 +1852,25 @@ static int __init init_blk_tracer(void)
 	BUILD_BUG_ON(__alignof__(struct blk_io_trace2) % __alignof__(long));
 
 	return 0;
+}
+
+static void __init blktrace_works_func(struct work_struct *work)
+{
+	__init_blk_tracer();
+}
+
+static int __init init_blk_tracer(void)
+{
+	int ret = 0;
+
+	if (trace_init_wq) {
+		INIT_WORK(&blktrace_works, blktrace_works_func);
+		queue_work(trace_init_wq, &blktrace_works);
+	} else {
+		ret = __init_blk_tracer();
+	}
+
+	return ret;
 }
 
 device_initcall(init_blk_tracer);
