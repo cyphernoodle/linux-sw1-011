@@ -1,6 +1,6 @@
 # ==============================================================================
 # ACER SWITCH ONE 10 (SW1-011) - DEFCONFIG ULTRA-OPTIMIZADO
-# ==============================================================================batt
+# ==============================================================================
 # Hardware: Intel Atom x5-Z8300 (4 cores), 2GB RAM, 32-64GB eMMC
 # Optimizado para: Máximo rendimiento, mínimo uso de RAM
 # ==============================================================================
@@ -1724,7 +1724,7 @@ CONFIG_PWM_LPSS_PLATFORM=y
 #INTEL CONFIGS
 CONFIG_INTEL_HID_EVENT=m
 CONFIG_INTEL_VBTN=m
-CONFIG_INTEL_INT0002_VGPIO=m
+CONFIG_INTEL_INT0002_VGPIO=y
 CONFIG_INTEL_BYTCRC_PWRSRC=m
 CONFIG_INTEL_CHTDC_TI_PWRBTN=m
 CONFIG_INTEL_CHTWC_INT33FE=m
@@ -1851,7 +1851,7 @@ CONFIG_MFD_AXP20X_I2C=y
 CONFIG_EXTCON_AXP288=y
 CONFIG_INPUT_AXP20X_PEK=y
 CONFIG_CHARGER_BQ24190=m
-CONFIG_TYPEC_MUX_PI3USB30532
+CONFIG_TYPEC_MUX_PI3USB30532=m
 
 # SPI Master Controller Drivers
 CONFIG_SPI_PXA2XX=m
