@@ -772,61 +772,13 @@ int msm_csiphy_subdev_init_legacy(struct camss *camss,
 
 	/* CSIPHY supplies */
 	for (i = 0; i < ARRAY_SIZE(res->regulators); i++) {
-		if (res->regulators[i])
+		if (res->regulators[i].supply)
 			csiphy->num_supplies++;
 	}
 
-	if (csiphy->num_supplies) {
-		csiphy->supplies = devm_kmalloc_array(camss->dev,
-						      csiphy->num_supplies,
-						      sizeof(*csiphy->supplies),
-						      GFP_KERNEL);
-		if (!csiphy->supplies)
-			return -ENOMEM;
-	}
-
-	for (i = 0; i < csiphy->num_supplies; i++)
-		csiphy->supplies[i].supply = res->regulators[i];
-
-	ret = devm_regulator_bulk_get(camss->dev, csiphy->num_supplies,
-				      csiphy->supplies);
-	return ret;
-}
-
-/*
- * msm_csiphy_subdev_init - Initialize CSIPHY device structure and resources
- * @csiphy: CSIPHY device
- * @res: CSIPHY module resources table
- * @id: CSIPHY module id
- *
- * Return 0 on success or a negative error code otherwise
- */
-int msm_csiphy_subdev_init(struct camss *camss,
-			   struct csiphy_device *csiphy,
-			   const struct camss_subdev_resources *res, u8 id)
-{
-	struct device *dev = camss->dev;
-	int ret;
-
-	csiphy->camss = camss;
-	csiphy->id = id;
-	csiphy->cfg.combo_mode = 0;
-	csiphy->res = &res->csiphy;
-
-	snprintf(csiphy->name, ARRAY_SIZE(csiphy->name), "csiphy%d",
-		 csiphy->id);
-
-	csiphy->phy = devm_phy_get(dev, csiphy->name);
-
-	if (IS_ERR(csiphy->phy)) {
-		dev_err(dev, "failed to get phy %s %d\n", csiphy->name, ret);
-		return PTR_ERR(csiphy->phy);
-	}
-
-	ret = phy_init(csiphy->phy);
-	if (ret)
-		dev_err(dev, "phy %s init fail %d\n", csiphy->name, ret);
-
+	if (csiphy->num_supplies > 0)
+		ret = devm_regulator_bulk_get_const(camss->dev, csiphy->num_supplies,
+						    res->regulators, &csiphy->supplies);
 	return ret;
 }
 

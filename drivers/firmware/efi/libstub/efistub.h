@@ -36,6 +36,7 @@
 
 struct edid_info;
 struct screen_info;
+struct sysfb_display_info;
 
 extern bool efi_no5lvl;
 extern bool efi_nochunk;
@@ -275,7 +276,7 @@ union efi_boot_services {
 		efi_status_t (__efiapi *wait_for_event)(unsigned long,
 							efi_event_t *,
 							unsigned long *);
-		void *signal_event;
+		efi_status_t (__efiapi *signal_event)(efi_event_t);
 		efi_status_t (__efiapi *close_event)(efi_event_t);
 		void *check_event;
 		void *install_protocol_interface;
@@ -327,7 +328,7 @@ union efi_boot_services {
 		void *calculate_crc32;
 		void (__efiapi *copy_mem)(void *, const void *, unsigned long);
 		void (__efiapi *set_mem)(void *, unsigned long, unsigned char);
-		void *create_event_ex;
+		efi_status_t (__efiapi *create_event_ex)(u32, int, void *, void *, void *, efi_event_t *);
 	};
 	struct {
 		efi_table_hdr_t hdr;
@@ -1175,9 +1176,9 @@ efi_enable_reset_attack_mitigation(void) { }
 
 void efi_retrieve_eventlog(void);
 
-struct screen_info *alloc_screen_info(void);
-struct screen_info *__alloc_screen_info(void);
-void free_screen_info(struct screen_info *si);
+struct sysfb_display_info *alloc_primary_display(void);
+struct sysfb_display_info *__alloc_primary_display(void);
+void free_primary_display(struct sysfb_display_info *dpy);
 
 void efi_cache_sync_image(unsigned long image_base,
 			  unsigned long alloc_size);

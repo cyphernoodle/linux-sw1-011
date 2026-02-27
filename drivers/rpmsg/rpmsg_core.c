@@ -95,6 +95,14 @@ EXPORT_SYMBOL(rpmsg_release_channel);
  * equals to the src address of their rpmsg channel), the driver's handler
  * is invoked to process it.
  *
+ * Note that the endpoint for simple rpmsg drivers is created before calling
+ * probe() and closed after calling remove(), so special care must be taken
+ * to handle calls to the rx callback before/in parallel of probe() and
+ * after/in parallel of remove(). If more control over the endpoint creation
+ * is required to avoid race conditions, drivers can omit the callback and
+ * explicitly call rpmsg_dev_open_ept() in probe() and rpmsg_destroy_ept() in
+ * remove(), together with locks as needed.
+ *
  * That said, more complicated drivers might need to allocate
  * additional rpmsg addresses, and bind them to different rx callbacks.
  * To accomplish that, those drivers need to call this function.
@@ -352,50 +360,38 @@ field##_show(struct device *dev,					\
 }									\
 static DEVICE_ATTR_RO(field);
 
-#define rpmsg_string_attr(field, member)				\
-static ssize_t								\
-field##_store(struct device *dev, struct device_attribute *attr,	\
-	      const char *buf, size_t sz)				\
-{									\
-	struct rpmsg_device *rpdev = to_rpmsg_device(dev);		\
-	const char *old;						\
-	char *new;							\
-									\
-	new = kstrndup(buf, sz, GFP_KERNEL);				\
-	if (!new)							\
-		return -ENOMEM;						\
-	new[strcspn(new, "\n")] = '\0';					\
-									\
-	device_lock(dev);						\
-	old = rpdev->member;						\
-	if (strlen(new)) {						\
-		rpdev->member = new;					\
-	} else {							\
-		kfree(new);						\
-		rpdev->member = NULL;					\
-	}								\
-	device_unlock(dev);						\
-									\
-	kfree(old);							\
-									\
-	return sz;							\
-}									\
-static ssize_t								\
-field##_show(struct device *dev,					\
-	     struct device_attribute *attr, char *buf)			\
-{									\
-	struct rpmsg_device *rpdev = to_rpmsg_device(dev);		\
-									\
-	return sprintf(buf, "%s\n", rpdev->member);			\
-}									\
-static DEVICE_ATTR_RW(field)
-
 /* for more info, see Documentation/ABI/testing/sysfs-bus-rpmsg */
 rpmsg_show_attr(name, id.name, "%s\n");
 rpmsg_show_attr(src, src, "0x%x\n");
 rpmsg_show_attr(dst, dst, "0x%x\n");
 rpmsg_show_attr(announce, announce ? "true" : "false", "%s\n");
-rpmsg_string_attr(driver_override, driver_override);
+
+static ssize_t driver_override_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	struct rpmsg_device *rpdev = to_rpmsg_device(dev);
+	int ret;
+
+	ret = driver_set_override(dev, &rpdev->driver_override, buf, count);
+	if (ret)
+		return ret;
+
+	return count;
+}
+
+static ssize_t driver_override_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	struct rpmsg_device *rpdev = to_rpmsg_device(dev);
+	ssize_t len;
+
+	device_lock(dev);
+	len = sysfs_emit(buf, "%s\n", rpdev->driver_override);
+	device_unlock(dev);
+	return len;
+}
+static DEVICE_ATTR_RW(driver_override);
 
 static ssize_t modalias_show(struct device *dev,
 			     struct device_attribute *attr, char *buf)
@@ -463,6 +459,32 @@ static int rpmsg_uevent(const struct device *dev, struct kobj_uevent_env *env)
 					rpdev->id.name);
 }
 
+struct rpmsg_endpoint *rpmsg_dev_open_ept(struct rpmsg_device *rpdev,
+					  rpmsg_rx_cb_t cb, void *priv)
+{
+	struct rpmsg_driver *rpdrv = to_rpmsg_driver(rpdev->dev.driver);
+	struct rpmsg_channel_info chinfo = {
+		.src = rpdev->src,
+		.dst = RPMSG_ADDR_ANY,
+	};
+	struct rpmsg_endpoint *ept;
+
+	strscpy(chinfo.name, rpdev->id.name, sizeof(chinfo.name));
+
+	ept = rpmsg_create_ept(rpdev, cb, priv, chinfo);
+	if (!ept) {
+		dev_err(&rpdev->dev, "failed to create endpoint\n");
+		return NULL;
+	}
+
+	rpdev->ept = ept;
+	rpdev->src = ept->addr;
+
+	ept->flow_cb = rpdrv->flowcontrol;
+	return ept;
+}
+EXPORT_SYMBOL(rpmsg_dev_open_ept);
+
 /*
  * when an rpmsg driver is probed with a channel, we seamlessly create
  * it an endpoint, binding its rx callback to a unique local rpmsg
@@ -475,7 +497,6 @@ static int rpmsg_dev_probe(struct device *dev)
 {
 	struct rpmsg_device *rpdev = to_rpmsg_device(dev);
 	struct rpmsg_driver *rpdrv = to_rpmsg_driver(rpdev->dev.driver);
-	struct rpmsg_channel_info chinfo = {};
 	struct rpmsg_endpoint *ept = NULL;
 	int err;
 
@@ -485,21 +506,11 @@ static int rpmsg_dev_probe(struct device *dev)
 		goto out;
 
 	if (rpdrv->callback) {
-		strscpy(chinfo.name, rpdev->id.name, sizeof(chinfo.name));
-		chinfo.src = rpdev->src;
-		chinfo.dst = RPMSG_ADDR_ANY;
-
-		ept = rpmsg_create_ept(rpdev, rpdrv->callback, NULL, chinfo);
+		ept = rpmsg_dev_open_ept(rpdev, rpdrv->callback, NULL);
 		if (!ept) {
-			dev_err(dev, "failed to create endpoint\n");
 			err = -ENOMEM;
 			goto out;
 		}
-
-		rpdev->ept = ept;
-		rpdev->src = ept->addr;
-
-		ept->flow_cb = rpdrv->flowcontrol;
 	}
 
 	err = rpdrv->probe(rpdev);
@@ -508,7 +519,7 @@ static int rpmsg_dev_probe(struct device *dev)
 		goto destroy_ept;
 	}
 
-	if (ept && rpdev->ops->announce_create) {
+	if (rpdev->ept && rpdev->ops->announce_create) {
 		err = rpdev->ops->announce_create(rpdev);
 		if (err) {
 			dev_err(dev, "failed to announce creation\n");
@@ -533,13 +544,13 @@ static void rpmsg_dev_remove(struct device *dev)
 	struct rpmsg_device *rpdev = to_rpmsg_device(dev);
 	struct rpmsg_driver *rpdrv = to_rpmsg_driver(rpdev->dev.driver);
 
-	if (rpdev->ops->announce_destroy)
+	if (rpdev->ept && rpdev->ops->announce_destroy)
 		rpdev->ops->announce_destroy(rpdev);
 
 	if (rpdrv->remove)
 		rpdrv->remove(rpdev);
 
-	if (rpdev->ept)
+	if (rpdrv->callback && rpdev->ept)
 		rpmsg_destroy_ept(rpdev->ept);
 }
 

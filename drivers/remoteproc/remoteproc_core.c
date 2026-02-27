@@ -557,7 +557,7 @@ static int rproc_handle_trace(struct rproc *rproc, void *ptr,
 		return -EINVAL;
 	}
 
-	trace = kzalloc(sizeof(*trace), GFP_KERNEL);
+	trace = kzalloc_obj(*trace);
 	if (!trace)
 		return -ENOMEM;
 
@@ -635,7 +635,7 @@ static int rproc_handle_devmem(struct rproc *rproc, void *ptr,
 		return -EINVAL;
 	}
 
-	mapping = kzalloc(sizeof(*mapping), GFP_KERNEL);
+	mapping = kzalloc_obj(*mapping);
 	if (!mapping)
 		return -ENOMEM;
 
@@ -727,7 +727,7 @@ static int rproc_alloc_carveout(struct rproc *rproc,
 	 * physical address in this case.
 	 */
 	if (mem->da != FW_RSC_ADDR_ANY && rproc->domain) {
-		mapping = kzalloc(sizeof(*mapping), GFP_KERNEL);
+		mapping = kzalloc_obj(*mapping);
 		if (!mapping) {
 			ret = -ENOMEM;
 			goto dma_free;
@@ -917,7 +917,7 @@ rproc_mem_entry_init(struct device *dev,
 	struct rproc_mem_entry *mem;
 	va_list args;
 
-	mem = kzalloc(sizeof(*mem), GFP_KERNEL);
+	mem = kzalloc_obj(*mem);
 	if (!mem)
 		return mem;
 
@@ -960,7 +960,7 @@ rproc_of_resm_mem_entry_init(struct device *dev, u32 of_resm_idx, size_t len,
 	struct rproc_mem_entry *mem;
 	va_list args;
 
-	mem = kzalloc(sizeof(*mem), GFP_KERNEL);
+	mem = kzalloc_obj(*mem);
 	if (!mem)
 		return mem;
 
@@ -1683,7 +1683,8 @@ static int rproc_trigger_auto_boot(struct rproc *rproc)
 	 * for a firmware image to be loaded, we can simply initiate the process
 	 * of attaching to it immediately.
 	 */
-	if (rproc->state == RPROC_DETACHED)
+	if (rproc->state == RPROC_DETACHED &&
+	    rproc->auto_boot != RPROC_AUTO_BOOT_RESTART_IF_FW_AVAILABLE)
 		return rproc_boot(rproc);
 
 	/*
@@ -1708,8 +1709,9 @@ static int rproc_stop(struct rproc *rproc, bool crashed)
 	if (!rproc->ops->stop)
 		return -EINVAL;
 
-	/* Stop any subdevices for the remote processor */
-	rproc_stop_subdevices(rproc, crashed);
+	/* Stop any subdevices for the remote processor if it was attached */
+	if (rproc->state != RPROC_DETACHED)
+		rproc_stop_subdevices(rproc, crashed);
 
 	/* the installed resource table is no longer accessible */
 	ret = rproc_reset_rsc_table_on_stop(rproc);
@@ -1726,7 +1728,8 @@ static int rproc_stop(struct rproc *rproc, bool crashed)
 		return ret;
 	}
 
-	rproc_unprepare_subdevices(rproc);
+	if (rproc->state != RPROC_DETACHED)
+		rproc_unprepare_subdevices(rproc);
 
 	rproc->state = RPROC_OFFLINE;
 
@@ -1903,9 +1906,9 @@ out:
  */
 int rproc_boot(struct rproc *rproc)
 {
-	const struct firmware *firmware_p;
+	const struct firmware *firmware_p = NULL;
 	struct device *dev;
-	int ret;
+	int ret, fw_ret = 1;
 
 	if (!rproc) {
 		pr_err("invalid rproc handle\n");
@@ -1932,6 +1935,19 @@ int rproc_boot(struct rproc *rproc)
 		goto unlock_mutex;
 	}
 
+	/* Check early if we have firmware avilable if needed */
+	if (rproc->auto_boot == RPROC_AUTO_BOOT_RESTART_IF_FW_AVAILABLE &&
+	    rproc->state == RPROC_DETACHED) {
+		fw_ret = request_firmware(&firmware_p, rproc->firmware, dev);
+		if (fw_ret == 0) {
+			dev_info(dev, "restarting %s with new firmware\n", rproc->name);
+
+			ret = rproc_stop(rproc, false);
+			if (ret)
+				goto downref_rproc;
+		}
+	}
+
 	if (rproc->state == RPROC_DETACHED) {
 		dev_info(dev, "attaching to %s\n", rproc->name);
 
@@ -1939,19 +1955,20 @@ int rproc_boot(struct rproc *rproc)
 	} else {
 		dev_info(dev, "powering up %s\n", rproc->name);
 
-		/* load firmware */
-		ret = request_firmware(&firmware_p, rproc->firmware, dev);
-		if (ret < 0) {
-			dev_err(dev, "request_firmware failed: %d\n", ret);
+		/* load firmware (if not already happened above) */
+		if (fw_ret == 1)
+			fw_ret = request_firmware(&firmware_p, rproc->firmware, dev);
+		if (fw_ret < 0) {
+			dev_err(dev, "request_firmware failed: %d\n", fw_ret);
+			ret = fw_ret;
 			goto downref_rproc;
 		}
 
 		ret = rproc_fw_boot(rproc, firmware_p);
-
-		release_firmware(firmware_p);
 	}
 
 downref_rproc:
+	release_firmware(firmware_p);
 	if (ret)
 		atomic_dec(&rproc->power);
 unlock_mutex:
@@ -2259,6 +2276,10 @@ static int rproc_validate(struct rproc *rproc)
 		return -EINVAL;
 	}
 
+	if (rproc->auto_boot == RPROC_AUTO_BOOT_RESTART_IF_FW_AVAILABLE &&
+	    (!rproc->ops->stop || !rproc->ops->start || !rproc->ops->attach))
+		return -EINVAL;
+
 	return 0;
 }
 
@@ -2470,7 +2491,7 @@ struct rproc *rproc_alloc(struct device *dev, const char *name,
 		return NULL;
 
 	rproc->priv = &rproc[1];
-	rproc->auto_boot = true;
+	rproc->auto_boot = RPROC_AUTO_BOOT_ATTACH_OR_START;
 	rproc->elf_class = ELFCLASSNONE;
 	rproc->elf_machine = EM_NONE;
 

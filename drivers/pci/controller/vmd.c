@@ -270,7 +270,7 @@ static int vmd_msi_alloc(struct irq_domain *domain, unsigned int virq,
 	struct vmd_irq *vmdirq;
 
 	for (int i = 0; i < nr_irqs; ++i) {
-		vmdirq = kzalloc(sizeof(*vmdirq), GFP_KERNEL);
+		vmdirq = kzalloc_obj(*vmdirq);
 		if (!vmdirq) {
 			vmd_msi_free(domain, virq, i);
 			return -ENOMEM;
@@ -762,11 +762,6 @@ static int vmd_pm_enable_quirk(struct pci_dev *pdev, void *userdata)
 	pci_info(pdev, "VMD: Default LTR value set by driver\n");
 
 out_state_change:
-	/*
-	 * Ensure devices are in D0 before enabling PCI-PM L1 PM Substates, per
-	 * PCIe r6.0, sec 5.5.4.
-	 */
-	pci_set_power_state_locked(pdev, PCI_D0);
 	pci_enable_link_state_locked(pdev, PCIE_LINK_STATE_ALL);
 	return 0;
 }
