@@ -117,12 +117,26 @@
 /* For dup_mmap(). */
 #include "../mm/internal.h"
 
+#ifdef CONFIG_SCHED_BORE
+#include <linux/sched/bore.h>
+#endif /* CONFIG_SCHED_BORE */
+
 #include <trace/events/sched.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/task.h>
 
 #include <kunit/visibility.h>
+
+#ifdef CONFIG_USER_NS
+# ifdef CONFIG_USER_NS_UNPRIVILEGED
+static int unprivileged_userns_clone = 1;
+# else
+static int unprivileged_userns_clone = 0;
+# endif
+#else
+#define unprivileged_userns_clone 1
+#endif
 
 /*
  * Minimum number of threads to boot the kernel
@@ -2028,6 +2042,11 @@ __latent_entropy struct task_struct *copy_process(
 			return ERR_PTR(-EINVAL);
 	}
 
+	if ((clone_flags & CLONE_NEWUSER) && !unprivileged_userns_clone) {
+		if (!capable(CAP_SYS_ADMIN))
+			return ERR_PTR(-EPERM);
+	}
+
 	/*
 	 * Force any signals received before this point to be delivered
 	 * before the fork happens.  Collect up signals sent to multiple
@@ -2362,6 +2381,11 @@ __latent_entropy struct task_struct *copy_process(
 	p->start_time = ktime_get_ns();
 	p->start_boottime = ktime_get_boottime_ns();
 
+#ifdef CONFIG_SCHED_BORE
+	if (likely(p->pid))
+		task_fork_bore(p, current, clone_flags, p->start_time);
+#endif /* CONFIG_SCHED_BORE */
+
 	/*
 	 * Make it visible to the rest of the system, but dont wake it up yet.
 	 * Need tasklist lock for parent etc handling!
@@ -2435,7 +2459,7 @@ __latent_entropy struct task_struct *copy_process(
 			 */
 			p->signal->has_child_subreaper = p->real_parent->signal->has_child_subreaper ||
 							 p->real_parent->signal->is_child_subreaper;
-			list_add_tail(&p->sibling, &p->real_parent->children);
+			list_add_tail_rcu(&p->sibling, &p->real_parent->children);
 			list_add_tail_rcu(&p->tasks, &init_task.tasks);
 			attach_pid(p, PIDTYPE_TGID);
 			attach_pid(p, PIDTYPE_PGID);
@@ -3070,6 +3094,10 @@ static int check_unshare_flags(unsigned long unshare_flags)
 		if (!current_is_single_threaded())
 			return -EINVAL;
 	}
+	if ((unshare_flags & CLONE_NEWUSER) && !unprivileged_userns_clone) {
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+	}
 
 	return 0;
 }
@@ -3300,6 +3328,15 @@ static const struct ctl_table fork_sysctl_table[] = {
 		.mode		= 0644,
 		.proc_handler	= sysctl_max_threads,
 	},
+#ifdef CONFIG_USER_NS
+	{
+		.procname	= "unprivileged_userns_clone",
+		.data		= &unprivileged_userns_clone,
+		.maxlen		= sizeof(int),
+		.mode		= 0644,
+		.proc_handler	= proc_dointvec,
+	},
+#endif
 };
 
 static int __init init_fork_sysctl(void)
