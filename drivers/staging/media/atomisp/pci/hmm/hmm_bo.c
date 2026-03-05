@@ -620,10 +620,9 @@ static void free_private_bo_pages(struct hmm_buffer_object *bo)
 /*Allocate pages which will be used only by ISP*/
 static int alloc_private_pages(struct hmm_buffer_object *bo)
 {
-	const gfp_t gfp = __GFP_NOWARN | __GFP_RECLAIM | __GFP_FS;
 	int ret;
 
-	ret = alloc_pages_bulk(gfp, bo->pgnr, bo->pages);
+	ret = alloc_pages_bulk(GFP_KERNEL, bo->pgnr, bo->pages);
 	if (ret != bo->pgnr) {
 		free_pages_bulk_array(ret, bo->pages);
 		dev_err(atomisp_dev, "alloc_pages_bulk() failed\n");
