@@ -999,6 +999,10 @@ static int ov5647_s_ctrl(struct v4l2_ctrl *ctrl)
 		ret = cci_write(sensor->regmap, OV5647_REG_HTS,
 				sensor->mode->format.width + ctrl->val, &ret);
 		break;
+	case V4L2_CID_HBLANK:
+		ret = ov5647_write16(sd, OV5647_REG_HTS_HI,
+				     sensor->mode->format.width + ctrl->val);
+		break;
 	case V4L2_CID_TEST_PATTERN:
 		ret = cci_write(sensor->regmap, OV5647_REG_ISPCTRL3D,
 				ov5647_test_pattern_val[ctrl->val], NULL);

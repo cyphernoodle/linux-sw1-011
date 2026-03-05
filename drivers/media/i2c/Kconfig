@@ -778,15 +778,17 @@ config VIDEO_S5K6A3
 	  This is a V4L2 sensor driver for Samsung S5K6A3 raw
 	  camera sensor.
 
-config VIDEO_S5KJN1
-	tristate "Samsung S5KJN1 sensor support"
+config VIDEO_T4KA3
+	tristate "Toshiba T4KA3 sensor support"
+	depends on ACPI || COMPILE_TEST
+	depends on GPIOLIB
 	select V4L2_CCI_I2C
 	help
-	  This is a V4L2 sensor driver for Samsung S5KJN1 50MP raw
+	  This is a Video4Linux2 sensor driver for the Toshiba T4KA3 8 MP
 	  camera sensor.
 
 	  To compile this driver as a module, choose M here: the
-	  module will be called s5kjn1.
+	  module will be called t4ka3.
 
 config VIDEO_VD55G1
 	tristate "ST VD55G1 sensor support"
@@ -857,6 +859,14 @@ config VIDEO_AD5820
 	help
 	  This is a driver for the AD5820 camera lens voice coil.
 	  It is used for example in Nokia N900 (RX-51).
+
+config VIDEO_AD5823
+	tristate "AD5823 lens voice coil support"
+	select V4L2_CCI_I2C
+	help
+	  This is a driver for the AD5823 camera lens voice coil / VCM.
+	  This is designed for linear control of voice coil motors,
+	  controlled via I2C serial interface.
 
 config VIDEO_AK7375
 	tristate "AK7375 lens voice coil support"
