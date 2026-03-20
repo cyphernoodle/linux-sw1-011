@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0 
 
@@ -42,7 +42,7 @@ jobs:
           git reset --hard jwr-sunxi/main
           git push origin sunxi-base --force
 
-      - name: Create and Auto-merge PRs to Upstream-Acer
+      - name: Create and Auto-merge PRs to Acer-cachyos-Patches
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -50,27 +50,27 @@ jobs:
           BRANCHES=("torvalds-base" "sunxi-base")
 
           for branch in "${BRANCHES[@]}"; do
-            echo "Comparando $branch con Upstream-Acer..."
+            echo "Comparando $branch con Acer-cachyos-Patches..."
             
-            git checkout Upstream-Acer
+            git checkout Acer-cachyos-Patches
             git fetch origin
             
             # Verificamos si la rama espejo tiene commits que no están en Upstream-Acer
-            if [ $(git rev-list --count Upstream-Acer..origin/$branch) -eq 0 ]; then
+            if [ $(git rev-list --count Acer-cachyos-Patches..origin/$branch) -eq 0 ]; then
               echo "No hay cambios nuevos en $branch. Saltando."
               continue
             fi
 
             echo "Creando Pull Request para $branch..."
             PR_URL=$(gh pr create \
-              --base Upstream-Acer \
+              --base Acer-cachyos-Patches \
               --head $branch \
-              --title "Sync: $branch a Upstream-Acer" \
+              --title "Sync: $branch a Acer-cachyos-Patches" \
               --body "Actualización automática del kernel original. Mezcla automática si no hay conflictos." \
               2>/dev/null || echo "exists")
 
             if [ "$PR_URL" = "exists" ]; then
-              PR_URL=$(gh pr list --head $branch --base Upstream-Acer --json url --jq '.[0].url')
+              PR_URL=$(gh pr list --head $branch --base Acer-cachyos-Patches --json url --jq '.[0].url')
             fi
 
             if [ -n "$PR_URL" ] && [ "$PR_URL" != "null" ]; then
