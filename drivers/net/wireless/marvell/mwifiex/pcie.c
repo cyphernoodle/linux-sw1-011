@@ -228,6 +228,12 @@ mwifiex_write_reg(struct mwifiex_adapter *adapter, int reg, u32 data)
 	struct pcie_service_card *card = adapter->card;
 
 	iowrite32(data, card->pci_mmap1 + reg);
+
+	/* Do a read-back, which makes the write non-posted, ensuring the
+	 * completion before returning.
+	 * The firmware of the 88W8897 card is buggy and this avoids crashes.
+	 */
+	ioread32(card->pci_mmap1 + reg);
 }
 
 /* Non-void wrapper needed for read_poll_timeout(). */
@@ -2818,6 +2824,16 @@ static void mwifiex_pcie_device_dump_work(struct mwifiex_adapter *adapter)
 static void mwifiex_pcie_card_reset_work(struct mwifiex_adapter *adapter)
 {
 	struct pcie_service_card *card = adapter->card;
+
+	/* On Surface 3, reset_wsid method removes then re-probes card by
+	 * itself. So, need to place it here and skip performing any other
+	 * reset-related works.
+	 */
+	if (card->quirks & QUIRK_FW_RST_WSID_S3) {
+		mwifiex_pcie_reset_wsid_quirk(card->dev);
+		/* skip performing any other reset-related works */
+		return;
+	}
 
 	/* We can't afford to wait here; remove() might be waiting on us. If we
 	 * can't grab the device lock, maybe we'll get another chance later.

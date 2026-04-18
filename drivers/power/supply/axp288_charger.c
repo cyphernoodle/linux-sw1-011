@@ -2,7 +2,7 @@
 /*
  * axp288_charger.c - X-power AXP288 PMIC Charger driver
  *
- * Copyright (C) 2016-2017 Hans de Goede <hdegoede@redhat.com>
+ * Copyright (C) 2016-2025 Hans de Goede <hansg@kernel.org>
  * Copyright (C) 2014 Intel Corporation
  * Author: Ramakrishna Pallala <ramakrishna.pallala@intel.com>
  */
@@ -148,6 +148,8 @@ struct axp288_chrg_info {
 	unsigned int op_mode;
 	unsigned int backend_control;
 	bool valid;
+	bool charge_enable;
+	bool charge_inhibit;
 };
 
 static inline int axp288_charger_set_cc(struct axp288_chrg_info *info, int cc)
@@ -285,9 +287,9 @@ static int axp288_charger_vbus_path_select(struct axp288_chrg_info *info,
 	return ret;
 }
 
-static int axp288_charger_enable_charger(struct axp288_chrg_info *info,
-								bool enable)
+static int axp288_charger_update_charge_en(struct axp288_chrg_info *info)
 {
+	bool enable = info->charge_enable && !info->charge_inhibit;
 	int ret;
 
 	if (enable)
@@ -300,6 +302,18 @@ static int axp288_charger_enable_charger(struct axp288_chrg_info *info,
 		dev_err(&info->pdev->dev, "axp288 enable charger %d\n", ret);
 
 	return ret;
+}
+
+static int axp288_charger_enable_charger(struct axp288_chrg_info *info, bool enable)
+{
+	info->charge_enable = enable;
+	return axp288_charger_update_charge_en(info);
+}
+
+static int axp288_charger_inhibit_charger(struct axp288_chrg_info *info, bool inhibit)
+{
+	info->charge_inhibit = inhibit;
+	return axp288_charger_update_charge_en(info);
 }
 
 static int axp288_get_charger_health(struct axp288_chrg_info *info)
@@ -327,6 +341,19 @@ static int axp288_charger_usb_set_property(struct power_supply *psy,
 
 	mutex_lock(&info->lock);
 	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+		switch (val->intval) {
+		case POWER_SUPPLY_STATUS_CHARGING:
+			ret = axp288_charger_inhibit_charger(info, false);
+			break;
+		case POWER_SUPPLY_STATUS_DISCHARGING:
+		case POWER_SUPPLY_STATUS_NOT_CHARGING:
+			ret = axp288_charger_inhibit_charger(info, true);
+			break;
+		default:
+			ret = -EINVAL;
+		}
+		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
 		scaled_val = min(val->intval, info->max_cc);
 		scaled_val = DIV_ROUND_CLOSEST(scaled_val, 1000);
@@ -359,6 +386,8 @@ static int axp288_charger_usb_set_property(struct power_supply *psy,
 
 out:
 	mutex_unlock(&info->lock);
+	if (ret == 0)
+		power_supply_changed(info->psy_usb);
 	return ret;
 }
 
@@ -421,6 +450,14 @@ static int axp288_charger_usb_get_property(struct power_supply *psy,
 		goto out;
 
 	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
+		if (info->charge_enable && !info->charge_inhibit)
+			val->intval = POWER_SUPPLY_STATUS_CHARGING;
+		else if (info->charge_enable && info->charge_inhibit)
+			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
+		else /* !info->charge_enable && xxx */
+			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+		break;
 	case POWER_SUPPLY_PROP_PRESENT:
 		/* Check for OTG case first */
 		if (info->otg.id_short) {
@@ -470,6 +507,7 @@ static int axp288_charger_property_is_writeable(struct power_supply *psy,
 	int ret;
 
 	switch (psp) {
+	case POWER_SUPPLY_PROP_STATUS:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT:
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 	case POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT:
@@ -483,6 +521,7 @@ static int axp288_charger_property_is_writeable(struct power_supply *psy,
 }
 
 static enum power_supply_property axp288_usb_props[] = {
+	POWER_SUPPLY_PROP_STATUS,
 	POWER_SUPPLY_PROP_PRESENT,
 	POWER_SUPPLY_PROP_ONLINE,
 	POWER_SUPPLY_PROP_TYPE,
@@ -631,8 +670,8 @@ static void axp288_charger_extcon_evt_worker(struct work_struct *work)
 	/* Offline? Disable charging and bail */
 	if (!(val & PS_STAT_VBUS_VALID)) {
 		dev_dbg(&info->pdev->dev, "USB charger disconnected\n");
-		axp288_charger_enable_charger(info, false);
 		mutex_lock(&info->lock);
+		axp288_charger_enable_charger(info, false);
 		info->valid = false;
 		mutex_unlock(&info->lock);
 		power_supply_changed(info->psy_usb);
@@ -660,13 +699,13 @@ static void axp288_charger_extcon_evt_worker(struct work_struct *work)
 
 	/* Set vbus current limit first, then enable charger */
 	ret = axp288_charger_set_vbus_inlmt(info, current_limit);
-	if (ret == 0)
-		axp288_charger_enable_charger(info, true);
-	else
+	if (ret)
 		dev_err(&info->pdev->dev,
 			"error setting current limit (%d)\n", ret);
 
 	mutex_lock(&info->lock);
+	if (ret == 0)
+		axp288_charger_enable_charger(info, true);
 	info->valid = false;
 	mutex_unlock(&info->lock);
 	power_supply_changed(info->psy_usb);
