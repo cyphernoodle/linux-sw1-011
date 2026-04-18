@@ -34,33 +34,25 @@ properties:
     properties:
       port@0:
         $ref: /schemas/graph.yaml#/properties/port
-        description: Host interfaces of the connector
-
-        properties:
-          endpoint@0:
-            $ref: /schemas/graph.yaml#/properties/endpoint
-            description: PCIe interface
-
-          endpoint@1:
-            $ref: /schemas/graph.yaml#/properties/endpoint
-            description: SATA interface
-
-        anyOf:
-          - required:
-              - endpoint@0
-          - required:
-              - endpoint@1
+        description: PCIe interface
 
       port@1:
         $ref: /schemas/graph.yaml#/properties/port
+        description: SATA interface
+
+      port@2:
+        $ref: /schemas/graph.yaml#/properties/port
         description: USB 2.0 interface
 
-      i2c-parent:
-        $ref: /schemas/types.yaml#/definitions/phandle
-        description: SMBus interface
+    anyOf:
+      - required:
+          - port@0
+      - required:
+          - port@1
 
-    required:
-      - port@0
+  i2c-parent:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: I2C interface
 
   clocks:
     description: 32.768 KHz Suspend Clock (SUSCLK) input from the host system to
@@ -76,29 +68,29 @@ properties:
     maxItems: 1
 
   viocfg-gpios:
-    description: GPIO output to IO voltage configuration (VIO_CFG) signal. This
-      signal is used by the M.2 card to indicate to the host system that the
-      card supports an independent IO voltage domain for the sideband signals.
-      Refer, PCI Express M.2 Specification r4.0, sec 3.1.15.1 for more details.
+    description: GPIO input to IO voltage configuration (VIO_CFG) signal. This
+      signal is used by the host systems to determine whether the card supports
+      an independent IO voltage domain for the sideband signals or not. Refer,
+      PCI Express M.2 Specification r4.0, sec 3.1.15.1 for more details.
     maxItems: 1
 
   pwrdis-gpios:
-    description: GPIO input to Power Disable (PWRDIS) signal. This signal is
+    description: GPIO output to Power Disable (PWRDIS) signal. This signal is
       used by the host system to disable power on the M.2 card. Refer, PCI
       Express M.2 Specification r4.0, sec 3.3.5.2 for more details.
     maxItems: 1
 
   pln-gpios:
     description: GPIO output to Power Loss Notification (PLN#) signal. This
-      signal is use to notify the M.2 card by the host system that the power
-      loss event is expected to occur. Refer, PCI Express M.2 Specification
-      r4.0, sec 3.2.17.1 for more details.
+      signal is used by the host system to notify the M.2 card that the power
+      loss event is about to occur. Refer, PCI Express M.2 Specification r4.0,
+      sec 3.2.17.1 for more details.
     maxItems: 1
 
   plas3-gpios:
-    description: GPIO output to Power Loss Acknowledge (PLA_S3#) signal. This
-      signal is used by the M.2 card to notify the host system, the status of
-      the M.2 card's preparation for power loss.
+    description: GPIO input to Power Loss Acknowledge (PLA_S3#) signal. This
+      signal is used by the host system to receive the acknowledgment of the M.2
+      card's preparation for power loss.
     maxItems: 1
 
 required:
@@ -110,9 +102,17 @@ additionalProperties: false
 examples:
   # PCI M.2 Key M connector for SSDs with PCIe interface
   - |
+    #include <dt-bindings/gpio/gpio.h>
+
     connector {
         compatible = "pcie-m2-m-connector";
         vpcie3v3-supply = <&vreg_nvme>;
+        i2c-parent = <&i2c0>;
+        pedet-gpios = <&tlmm 95 GPIO_ACTIVE_HIGH>;
+        viocfg-gpios = <&tlmm 96 GPIO_ACTIVE_HIGH>;
+        pwrdis-gpios = <&tlmm 97 GPIO_ACTIVE_HIGH>;
+        pln-gpios = <&tlmm 98 GPIO_ACTIVE_LOW>;
+        plas3-gpios = <&tlmm 99 GPIO_ACTIVE_LOW>;
 
         ports {
             #address-cells = <1>;
@@ -127,6 +127,18 @@ examples:
                 endpoint@0 {
                     reg = <0>;
                     remote-endpoint = <&pcie6_port0_ep>;
+                };
+            };
+
+            port@2 {
+                #address-cells = <1>;
+                #size-cells = <0>;
+
+                reg = <2>;
+
+                endpoint@0 {
+                    reg = <0>;
+                    remote-endpoint = <&usb_hs_ep>;
                 };
             };
         };

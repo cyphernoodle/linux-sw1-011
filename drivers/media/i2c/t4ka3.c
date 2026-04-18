@@ -5,6 +5,7 @@
  * Copyright (C) 2015 Intel Corporation. All Rights Reserved.
  * Copyright (C) 2016 XiaoMi, Inc.
  * Copyright (C) 2024 Hans de Goede <hansg@kernel.org>
+ * Copyright (C) 2026 Kate Hsuan <hpa@redhat.com>
  */
 
 #include <linux/acpi.h>
@@ -103,9 +104,17 @@
 /* Unknown register at address 0x0900 */
 #define T4KA3_REG_0900				CCI_REG8(0x0900)
 #define T4KA3_REG_BINNING			CCI_REG8(0x0901)
-#define T4KA3_BINNING_VAL(_b) \
-	({ typeof(_b) (b) = (_b); \
-	((b) << 4) | (b); })
+#define T4KA3_BINNING_VAL(_bin) \
+({ \
+	typeof(_bin) (b) = (_bin); \
+	((b) << 4) | (b); \
+})
+
+#define to_t4ka3_sensor(_sd) container_of_const(_sd, \
+						struct t4ka3_data, sd)
+#define ctrl_to_t4ka3(_ctrl) container_of_const((_ctrl)->handler, \
+						struct t4ka3_data, \
+						ctrls.handler)
 
 struct t4ka3_ctrls {
 	struct v4l2_ctrl_handler handler;
@@ -121,9 +130,9 @@ struct t4ka3_ctrls {
 };
 
 struct t4ka3_mode {
-	int				binning;
-	u16				win_x;
-	u16				win_y;
+	int binning;
+	u16 win_x;
+	u16 win_y;
 };
 
 struct t4ka3_data {
@@ -136,7 +145,6 @@ struct t4ka3_data {
 	struct regmap *regmap;
 	struct gpio_desc *powerdown_gpio;
 	struct gpio_desc *reset_gpio;
-	s64 link_freq[1];
 	int streaming;
 
 	/* MIPI lane info */
@@ -146,131 +154,121 @@ struct t4ka3_data {
 
 /* init settings */
 static const struct cci_reg_sequence t4ka3_init_config[] = {
-	{CCI_REG8(0x4136), 0x13},
-	{CCI_REG8(0x4137), 0x33},
-	{CCI_REG8(0x3094), 0x01},
-	{CCI_REG8(0x0233), 0x01},
-	{CCI_REG8(0x4B06), 0x01},
-	{CCI_REG8(0x4B07), 0x01},
-	{CCI_REG8(0x3028), 0x01},
-	{CCI_REG8(0x3032), 0x14},
-	{CCI_REG8(0x305C), 0x0C},
-	{CCI_REG8(0x306D), 0x0A},
-	{CCI_REG8(0x3071), 0xFA},
-	{CCI_REG8(0x307E), 0x0A},
-	{CCI_REG8(0x307F), 0xFC},
-	{CCI_REG8(0x3091), 0x04},
-	{CCI_REG8(0x3092), 0x60},
-	{CCI_REG8(0x3096), 0xC0},
-	{CCI_REG8(0x3100), 0x07},
-	{CCI_REG8(0x3101), 0x4C},
-	{CCI_REG8(0x3118), 0xCC},
-	{CCI_REG8(0x3139), 0x06},
-	{CCI_REG8(0x313A), 0x06},
-	{CCI_REG8(0x313B), 0x04},
-	{CCI_REG8(0x3143), 0x02},
-	{CCI_REG8(0x314F), 0x0E},
-	{CCI_REG8(0x3169), 0x99},
-	{CCI_REG8(0x316A), 0x99},
-	{CCI_REG8(0x3171), 0x05},
-	{CCI_REG8(0x31A1), 0xA7},
-	{CCI_REG8(0x31A2), 0x9C},
-	{CCI_REG8(0x31A3), 0x8F},
-	{CCI_REG8(0x31A4), 0x75},
-	{CCI_REG8(0x31A5), 0xEE},
-	{CCI_REG8(0x31A6), 0xEA},
-	{CCI_REG8(0x31A7), 0xE4},
-	{CCI_REG8(0x31A8), 0xE4},
-	{CCI_REG8(0x31DF), 0x05},
-	{CCI_REG8(0x31EC), 0x1B},
-	{CCI_REG8(0x31ED), 0x1B},
-	{CCI_REG8(0x31EE), 0x1B},
-	{CCI_REG8(0x31F0), 0x1B},
-	{CCI_REG8(0x31F1), 0x1B},
-	{CCI_REG8(0x31F2), 0x1B},
-	{CCI_REG8(0x3204), 0x3F},
-	{CCI_REG8(0x3205), 0x03},
-	{CCI_REG8(0x3210), 0x01},
-	{CCI_REG8(0x3216), 0x68},
-	{CCI_REG8(0x3217), 0x58},
-	{CCI_REG8(0x3218), 0x58},
-	{CCI_REG8(0x321A), 0x68},
-	{CCI_REG8(0x321B), 0x60},
-	{CCI_REG8(0x3238), 0x03},
-	{CCI_REG8(0x3239), 0x03},
-	{CCI_REG8(0x323A), 0x05},
-	{CCI_REG8(0x323B), 0x06},
-	{CCI_REG8(0x3243), 0x03},
-	{CCI_REG8(0x3244), 0x08},
-	{CCI_REG8(0x3245), 0x01},
-	{CCI_REG8(0x3307), 0x19},
-	{CCI_REG8(0x3308), 0x19},
-	{CCI_REG8(0x3320), 0x01},
-	{CCI_REG8(0x3326), 0x15},
-	{CCI_REG8(0x3327), 0x0D},
-	{CCI_REG8(0x3328), 0x01},
-	{CCI_REG8(0x3380), 0x01},
-	{CCI_REG8(0x339E), 0x07},
-	{CCI_REG8(0x3424), 0x00},
-	{CCI_REG8(0x343C), 0x01},
-	{CCI_REG8(0x3398), 0x04},
-	{CCI_REG8(0x343A), 0x10},
-	{CCI_REG8(0x339A), 0x22},
-	{CCI_REG8(0x33B4), 0x00},
-	{CCI_REG8(0x3393), 0x01},
-	{CCI_REG8(0x33B3), 0x6E},
-	{CCI_REG8(0x3433), 0x06},
-	{CCI_REG8(0x3433), 0x00},
-	{CCI_REG8(0x33B3), 0x00},
-	{CCI_REG8(0x3393), 0x03},
-	{CCI_REG8(0x33B4), 0x03},
-	{CCI_REG8(0x343A), 0x00},
-	{CCI_REG8(0x339A), 0x00},
-	{CCI_REG8(0x3398), 0x00}
+	{ CCI_REG8(0x4136), 0x13 },
+	{ CCI_REG8(0x4137), 0x33 },
+	{ CCI_REG8(0x3094), 0x01 },
+	{ CCI_REG8(0x0233), 0x01 },
+	{ CCI_REG8(0x4B06), 0x01 },
+	{ CCI_REG8(0x4B07), 0x01 },
+	{ CCI_REG8(0x3028), 0x01 },
+	{ CCI_REG8(0x3032), 0x14 },
+	{ CCI_REG8(0x305C), 0x0C },
+	{ CCI_REG8(0x306D), 0x0A },
+	{ CCI_REG8(0x3071), 0xFA },
+	{ CCI_REG8(0x307E), 0x0A },
+	{ CCI_REG8(0x307F), 0xFC },
+	{ CCI_REG8(0x3091), 0x04 },
+	{ CCI_REG8(0x3092), 0x60 },
+	{ CCI_REG8(0x3096), 0xC0 },
+	{ CCI_REG8(0x3100), 0x07 },
+	{ CCI_REG8(0x3101), 0x4C },
+	{ CCI_REG8(0x3118), 0xCC },
+	{ CCI_REG8(0x3139), 0x06 },
+	{ CCI_REG8(0x313A), 0x06 },
+	{ CCI_REG8(0x313B), 0x04 },
+	{ CCI_REG8(0x3143), 0x02 },
+	{ CCI_REG8(0x314F), 0x0E },
+	{ CCI_REG8(0x3169), 0x99 },
+	{ CCI_REG8(0x316A), 0x99 },
+	{ CCI_REG8(0x3171), 0x05 },
+	{ CCI_REG8(0x31A1), 0xA7 },
+	{ CCI_REG8(0x31A2), 0x9C },
+	{ CCI_REG8(0x31A3), 0x8F },
+	{ CCI_REG8(0x31A4), 0x75 },
+	{ CCI_REG8(0x31A5), 0xEE },
+	{ CCI_REG8(0x31A6), 0xEA },
+	{ CCI_REG8(0x31A7), 0xE4 },
+	{ CCI_REG8(0x31A8), 0xE4 },
+	{ CCI_REG8(0x31DF), 0x05 },
+	{ CCI_REG8(0x31EC), 0x1B },
+	{ CCI_REG8(0x31ED), 0x1B },
+	{ CCI_REG8(0x31EE), 0x1B },
+	{ CCI_REG8(0x31F0), 0x1B },
+	{ CCI_REG8(0x31F1), 0x1B },
+	{ CCI_REG8(0x31F2), 0x1B },
+	{ CCI_REG8(0x3204), 0x3F },
+	{ CCI_REG8(0x3205), 0x03 },
+	{ CCI_REG8(0x3210), 0x01 },
+	{ CCI_REG8(0x3216), 0x68 },
+	{ CCI_REG8(0x3217), 0x58 },
+	{ CCI_REG8(0x3218), 0x58 },
+	{ CCI_REG8(0x321A), 0x68 },
+	{ CCI_REG8(0x321B), 0x60 },
+	{ CCI_REG8(0x3238), 0x03 },
+	{ CCI_REG8(0x3239), 0x03 },
+	{ CCI_REG8(0x323A), 0x05 },
+	{ CCI_REG8(0x323B), 0x06 },
+	{ CCI_REG8(0x3243), 0x03 },
+	{ CCI_REG8(0x3244), 0x08 },
+	{ CCI_REG8(0x3245), 0x01 },
+	{ CCI_REG8(0x3307), 0x19 },
+	{ CCI_REG8(0x3308), 0x19 },
+	{ CCI_REG8(0x3320), 0x01 },
+	{ CCI_REG8(0x3326), 0x15 },
+	{ CCI_REG8(0x3327), 0x0D },
+	{ CCI_REG8(0x3328), 0x01 },
+	{ CCI_REG8(0x3380), 0x01 },
+	{ CCI_REG8(0x339E), 0x07 },
+	{ CCI_REG8(0x3424), 0x00 },
+	{ CCI_REG8(0x343C), 0x01 },
+	{ CCI_REG8(0x3398), 0x04 },
+	{ CCI_REG8(0x343A), 0x10 },
+	{ CCI_REG8(0x339A), 0x22 },
+	{ CCI_REG8(0x33B4), 0x00 },
+	{ CCI_REG8(0x3393), 0x01 },
+	{ CCI_REG8(0x33B3), 0x6E },
+	{ CCI_REG8(0x3433), 0x06 },
+	{ CCI_REG8(0x3433), 0x00 },
+	{ CCI_REG8(0x33B3), 0x00 },
+	{ CCI_REG8(0x3393), 0x03 },
+	{ CCI_REG8(0x33B4), 0x03 },
+	{ CCI_REG8(0x343A), 0x00 },
+	{ CCI_REG8(0x339A), 0x00 },
+	{ CCI_REG8(0x3398), 0x00 }
 };
 
 static const struct cci_reg_sequence t4ka3_pre_mode_set_regs[] = {
-	{CCI_REG8(0x0112), 0x0A},
-	{CCI_REG8(0x0113), 0x0A},
-	{CCI_REG8(0x0114), 0x03},
-	{CCI_REG8(0x4136), 0x13},
-	{CCI_REG8(0x4137), 0x33},
-	{CCI_REG8(0x0820), 0x0A},
-	{CCI_REG8(0x0821), 0x0D},
-	{CCI_REG8(0x0822), 0x00},
-	{CCI_REG8(0x0823), 0x00},
-	{CCI_REG8(0x0301), 0x0A},
-	{CCI_REG8(0x0303), 0x01},
-	{CCI_REG8(0x0305), 0x04},
-	{CCI_REG8(0x0306), 0x02},
-	{CCI_REG8(0x0307), 0x18},
-	{CCI_REG8(0x030B), 0x01},
+	{ CCI_REG8(0x0112), 0x0A },
+	{ CCI_REG8(0x0113), 0x0A },
+	{ CCI_REG8(0x0114), 0x03 },
+	{ CCI_REG8(0x4136), 0x13 },
+	{ CCI_REG8(0x4137), 0x33 },
+	{ CCI_REG8(0x0820), 0x0A },
+	{ CCI_REG8(0x0821), 0x0D },
+	{ CCI_REG8(0x0822), 0x00 },
+	{ CCI_REG8(0x0823), 0x00 },
+	{ CCI_REG8(0x0301), 0x0A },
+	{ CCI_REG8(0x0303), 0x01 },
+	{ CCI_REG8(0x0305), 0x04 },
+	{ CCI_REG8(0x0306), 0x02 },
+	{ CCI_REG8(0x0307), 0x18 },
+	{ CCI_REG8(0x030B), 0x01 },
 };
 
 static const struct cci_reg_sequence t4ka3_post_mode_set_regs[] = {
-	{CCI_REG8(0x0902), 0x00},
-	{CCI_REG8(0x4220), 0x00},
-	{CCI_REG8(0x4222), 0x01},
-	{CCI_REG8(0x3380), 0x01},
-	{CCI_REG8(0x3090), 0x88},
-	{CCI_REG8(0x3394), 0x20},
-	{CCI_REG8(0x3090), 0x08},
-	{CCI_REG8(0x3394), 0x10}
+	{ CCI_REG8(0x0902), 0x00 },
+	{ CCI_REG8(0x4220), 0x00 },
+	{ CCI_REG8(0x4222), 0x01 },
+	{ CCI_REG8(0x3380), 0x01 },
+	{ CCI_REG8(0x3090), 0x88 },
+	{ CCI_REG8(0x3394), 0x20 },
+	{ CCI_REG8(0x3090), 0x08 },
+	{ CCI_REG8(0x3394), 0x10 }
 };
 
 static const s64 link_freq_menu_items[] = {
 	T4KA3_LINK_FREQ,
 };
-
-static inline struct t4ka3_data *to_t4ka3_sensor(struct v4l2_subdev *sd)
-{
-	return container_of(sd, struct t4ka3_data, sd);
-}
-
-static inline struct t4ka3_data *ctrl_to_t4ka3(struct v4l2_ctrl *ctrl)
-{
-	return container_of(ctrl->handler, struct t4ka3_data, ctrls.handler);
-}
 
 /* T4KA3 default GRBG */
 static const int t4ka3_hv_flip_bayer_order[] = {
@@ -287,12 +285,10 @@ static const struct v4l2_rect t4ka3_default_crop = {
 	.height = T4KA3_ACTIVE_HEIGHT,
 };
 
-static int t4ka3_detect(struct t4ka3_data *sensor, u16 *id);
-
 static void t4ka3_set_bayer_order(struct t4ka3_data *sensor,
 				  struct v4l2_mbus_framefmt *fmt)
 {
-	int hv_flip = 0;
+	unsigned int hv_flip = 0;
 
 	if (sensor->ctrls.vflip && sensor->ctrls.vflip->val)
 		hv_flip += 1;
@@ -303,28 +299,9 @@ static void t4ka3_set_bayer_order(struct t4ka3_data *sensor,
 	fmt->code = t4ka3_hv_flip_bayer_order[hv_flip];
 }
 
-static struct v4l2_mbus_framefmt *t4ka3_get_active_format(struct t4ka3_data *sensor)
+static int t4ka3_update_exposure_range(struct t4ka3_data *sensor,
+				       struct v4l2_mbus_framefmt *fmt)
 {
-	struct v4l2_subdev_state *active_state =
-		v4l2_subdev_get_locked_active_state(&sensor->sd);
-
-	return v4l2_subdev_state_get_format(active_state, 0);
-}
-
-static struct v4l2_rect *t4ka3_get_active_crop(struct t4ka3_data *sensor)
-{
-	struct v4l2_subdev_state *active_state =
-		v4l2_subdev_get_locked_active_state(&sensor->sd);
-
-	return v4l2_subdev_state_get_crop(active_state, 0);
-}
-
-static int t4ka3_update_exposure_range(struct t4ka3_data *sensor)
-{
-	struct v4l2_mbus_framefmt *fmt;
-
-	fmt = t4ka3_get_active_format(sensor);
-
 	int exp_max = fmt->height + sensor->ctrls.vblank->val -
 		      T4KA3_COARSE_INTEGRATION_TIME_MARGIN;
 
@@ -344,16 +321,13 @@ static void t4ka3_fill_format(struct t4ka3_data *sensor,
 	t4ka3_set_bayer_order(sensor, fmt);
 }
 
-static void t4ka3_calc_mode(struct t4ka3_data *sensor)
+static void t4ka3_calc_mode(struct t4ka3_data *sensor,
+			    struct v4l2_mbus_framefmt *fmt,
+			    struct v4l2_rect *crop)
 {
-	struct v4l2_mbus_framefmt *fmt;
-	struct v4l2_rect *crop;
 	int width;
 	int height;
 	int binning;
-
-	fmt = t4ka3_get_active_format(sensor);
-	crop = t4ka3_get_active_crop(sensor);
 
 	width = fmt->width;
 	height = fmt->height;
@@ -370,18 +344,19 @@ static void t4ka3_calc_mode(struct t4ka3_data *sensor)
 	sensor->mode.win_x = (crop->left + (crop->width - width) / 2) & ~1;
 	sensor->mode.win_y = (crop->top + (crop->height - height) / 2) & ~1;
 	/*
-	 * t4ka3's window is done after binning, but must still be a multiple of 2 ?
+	 * t4ka3's window is done after binning, but must still be a
+	 * multiple of 2 ?
 	 * Round up to avoid top 2 black lines in 1640x1230 (quarter res) case.
 	 */
 	sensor->mode.win_x = DIV_ROUND_UP(sensor->mode.win_x, binning);
 	sensor->mode.win_y = DIV_ROUND_UP(sensor->mode.win_y, binning);
 }
 
-static void t4ka3_get_vblank_limits(struct t4ka3_data *sensor, int *min, int *max, int *def)
+static void t4ka3_get_vblank_limits(struct t4ka3_data *sensor,
+				    struct v4l2_subdev_state *state,
+				    int *min, int *max, int *def)
 {
-	struct v4l2_mbus_framefmt *fmt;
-
-	fmt = t4ka3_get_active_format(sensor);
+	struct v4l2_mbus_framefmt *fmt = v4l2_subdev_state_get_format(state, 0);
 
 	*min = T4KA3_MIN_VBLANK + (sensor->mode.binning - 1) * fmt->height;
 	*max = T4KA3_MAX_VBLANK - fmt->height;
@@ -393,14 +368,11 @@ static int t4ka3_set_pad_format(struct v4l2_subdev *sd,
 				struct v4l2_subdev_format *format)
 {
 	struct t4ka3_data *sensor = to_t4ka3_sensor(sd);
-	struct v4l2_mbus_framefmt *try_fmt;
-	struct v4l2_mbus_framefmt *fmt;
-	const struct v4l2_rect *crop;
+	struct v4l2_mbus_framefmt *fmt = &format->format;
+	struct v4l2_rect *crop =
+		v4l2_subdev_state_get_crop(sd_state, format->pad);
 	unsigned int width, height;
 	int min, max, def, ret = 0;
-
-	crop = t4ka3_get_active_crop(sensor);
-	fmt = t4ka3_get_active_format(sensor);
 
 	/* Limit set_fmt max size to crop width / height */
 	width = clamp_val(ALIGN(format->format.width, 2),
@@ -408,12 +380,6 @@ static int t4ka3_set_pad_format(struct v4l2_subdev *sd,
 	height = clamp_val(ALIGN(format->format.height, 2),
 			   T4KA3_MIN_CROP_HEIGHT, crop->height);
 	t4ka3_fill_format(sensor, &format->format, width, height);
-
-	if (format->which == V4L2_SUBDEV_FORMAT_TRY) {
-		try_fmt = v4l2_subdev_state_get_format(sd_state, 0);
-		*try_fmt = format->format;
-		return 0;
-	}
 
 	if (format->which == V4L2_SUBDEV_FORMAT_ACTIVE && sensor->streaming)
 		return -EBUSY;
@@ -423,10 +389,10 @@ static int t4ka3_set_pad_format(struct v4l2_subdev *sd,
 	if (format->which == V4L2_SUBDEV_FORMAT_TRY)
 		return 0;
 
-	t4ka3_calc_mode(sensor);
+	t4ka3_calc_mode(sensor, fmt, crop);
 
 	/* vblank range is height dependent adjust and reset to default */
-	t4ka3_get_vblank_limits(sensor, &min, &max, &def);
+	t4ka3_get_vblank_limits(sensor, sd_state, &min, &max, &def);
 	ret = __v4l2_ctrl_modify_range(sensor->ctrls.vblank, min, max, 1, def);
 	if (ret)
 		return ret;
@@ -440,18 +406,15 @@ static int t4ka3_set_pad_format(struct v4l2_subdev *sd,
 	if (ret)
 		return ret;
 
-	ret = __v4l2_ctrl_s_ctrl(sensor->ctrls.hblank, def);
-	if (ret)
-		return ret;
-
-	return 0;
+	return  __v4l2_ctrl_s_ctrl(sensor->ctrls.hblank, def);
 }
 
 /* Horizontal or vertically flip the image */
-static int t4ka3_t_vflip(struct v4l2_subdev *sd, int value, u8 flip_bit)
+static int t4ka3_update_flip(struct v4l2_subdev *sd,
+			     struct v4l2_mbus_framefmt *fmt,
+			     int value, u8 flip_bit)
 {
 	struct t4ka3_data *sensor = to_t4ka3_sensor(sd);
-	struct v4l2_mbus_framefmt *fmt;
 	int ret;
 	u64 val;
 
@@ -465,14 +428,15 @@ static int t4ka3_t_vflip(struct v4l2_subdev *sd, int value, u8 flip_bit)
 	if (ret)
 		return ret;
 
-	fmt = t4ka3_get_active_format(sensor);
 	t4ka3_set_bayer_order(sensor, fmt);
+
 	return 0;
 }
 
 static int t4ka3_test_pattern(struct t4ka3_data *sensor, s32 value)
 {
-	return cci_write(sensor->regmap, T4KA3_REG_TEST_PATTERN_MODE, value, NULL);
+	return cci_write(sensor->regmap, T4KA3_REG_TEST_PATTERN_MODE,
+			 value, NULL);
 }
 
 static int t4ka3_detect(struct t4ka3_data *sensor, u16 *id)
@@ -504,40 +468,42 @@ static int t4ka3_detect(struct t4ka3_data *sensor, u16 *id)
 static int t4ka3_s_ctrl(struct v4l2_ctrl *ctrl)
 {
 	struct t4ka3_data *sensor = ctrl_to_t4ka3(ctrl);
-	struct v4l2_mbus_framefmt *fmt;
+	struct v4l2_subdev_state *state =
+			v4l2_subdev_get_locked_active_state(&sensor->sd);
+	struct v4l2_mbus_framefmt *fmt =
+			v4l2_subdev_state_get_format(state, 0);
 	int ret;
 
 	/* Update exposure range on vblank changes */
 	if (ctrl->id == V4L2_CID_VBLANK) {
-		ret = t4ka3_update_exposure_range(sensor);
+		ret = t4ka3_update_exposure_range(sensor, fmt);
 		if (ret)
 			return ret;
 	}
 
-	fmt = t4ka3_get_active_format(sensor);
-
 	/* Only apply changes to the controls if the device is powered up */
-	if (!pm_runtime_get_if_in_use(sensor->sd.dev)) {
-		t4ka3_set_bayer_order(sensor, fmt);
+	if (!pm_runtime_get_if_in_use(sensor->sd.dev))
 		return 0;
-	}
 
 	switch (ctrl->id) {
 	case V4L2_CID_TEST_PATTERN:
 		ret = t4ka3_test_pattern(sensor, ctrl->val);
 		break;
 	case V4L2_CID_VFLIP:
-		ret = t4ka3_t_vflip(&sensor->sd, ctrl->val, T4KA3_VFLIP_BIT);
+		ret = t4ka3_update_flip(&sensor->sd, fmt,
+					ctrl->val, T4KA3_VFLIP_BIT);
 		break;
 	case V4L2_CID_HFLIP:
-		ret = t4ka3_t_vflip(&sensor->sd, ctrl->val, T4KA3_HFLIP_BIT);
+		ret = t4ka3_update_flip(&sensor->sd, fmt,
+					ctrl->val, T4KA3_HFLIP_BIT);
 		break;
 	case V4L2_CID_VBLANK:
 		ret = cci_write(sensor->regmap, T4KA3_REG_FRAME_LENGTH_LINES,
 				fmt->height + ctrl->val, NULL);
 		break;
 	case V4L2_CID_EXPOSURE:
-		ret = cci_write(sensor->regmap, T4KA3_REG_COARSE_INTEGRATION_TIME,
+		ret = cci_write(sensor->regmap,
+				T4KA3_REG_COARSE_INTEGRATION_TIME,
 				ctrl->val, NULL);
 		break;
 	case V4L2_CID_ANALOGUE_GAIN:
@@ -550,40 +516,47 @@ static int t4ka3_s_ctrl(struct v4l2_ctrl *ctrl)
 	}
 
 	pm_runtime_put(sensor->sd.dev);
+
 	return ret;
 }
 
-static int t4ka3_set_mode(struct t4ka3_data *sensor)
+static int t4ka3_set_mode(struct t4ka3_data *sensor,
+			  struct v4l2_subdev_state *state)
 {
-	struct v4l2_mbus_framefmt *fmt;
+	struct v4l2_mbus_framefmt *fmt = v4l2_subdev_state_get_format(state, 0);
 	int ret = 0;
-
-	fmt = t4ka3_get_active_format(sensor);
 
 	cci_write(sensor->regmap, T4KA3_REG_HORZ_OUTPUT_SIZE, fmt->width, &ret);
 	/* Write mode-height - 2 otherwise things don't work, hw-bug ? */
-	cci_write(sensor->regmap, T4KA3_REG_VERT_OUTPUT_SIZE, fmt->height - 2, &ret);
-	/* Note overwritten by __v4l2_ctrl_handler_setup() based on vblank ctrl */
-	cci_write(sensor->regmap, T4KA3_REG_FRAME_LENGTH_LINES, T4KA3_LINES_PER_FRAME_30FPS, &ret);
-	cci_write(sensor->regmap, T4KA3_REG_PIXELS_PER_LINE, T4KA3_PIXELS_PER_LINE, &ret);
+	cci_write(sensor->regmap, T4KA3_REG_VERT_OUTPUT_SIZE,
+		  fmt->height - 2, &ret);
+
+	cci_write(sensor->regmap, T4KA3_REG_PIXELS_PER_LINE,
+		  T4KA3_PIXELS_PER_LINE, &ret);
 	/* Always use the full sensor, using window to crop */
 	cci_write(sensor->regmap, T4KA3_REG_HORZ_START, 0, &ret);
 	cci_write(sensor->regmap, T4KA3_REG_VERT_START, 0, &ret);
-	cci_write(sensor->regmap, T4KA3_REG_HORZ_END, T4KA3_NATIVE_WIDTH - 1, &ret);
-	cci_write(sensor->regmap, T4KA3_REG_VERT_END, T4KA3_NATIVE_HEIGHT - 1, &ret);
+	cci_write(sensor->regmap, T4KA3_REG_HORZ_END,
+		  T4KA3_NATIVE_WIDTH - 1, &ret);
+	cci_write(sensor->regmap, T4KA3_REG_VERT_END,
+		  T4KA3_NATIVE_HEIGHT - 1, &ret);
 	/* Set window */
-	cci_write(sensor->regmap, T4KA3_REG_WIN_START_X, sensor->mode.win_x, &ret);
-	cci_write(sensor->regmap, T4KA3_REG_WIN_START_Y, sensor->mode.win_y, &ret);
+	cci_write(sensor->regmap, T4KA3_REG_WIN_START_X,
+		  sensor->mode.win_x, &ret);
+	cci_write(sensor->regmap, T4KA3_REG_WIN_START_Y,
+		  sensor->mode.win_y, &ret);
 	cci_write(sensor->regmap, T4KA3_REG_WIN_WIDTH, fmt->width, &ret);
 	cci_write(sensor->regmap, T4KA3_REG_WIN_HEIGHT, fmt->height, &ret);
 	/* Write 1 to unknown register 0x0900 */
 	cci_write(sensor->regmap, T4KA3_REG_0900, 1, &ret);
-	cci_write(sensor->regmap, T4KA3_REG_BINNING, T4KA3_BINNING_VAL(sensor->mode.binning), &ret);
+	cci_write(sensor->regmap, T4KA3_REG_BINNING,
+		  T4KA3_BINNING_VAL(sensor->mode.binning), &ret);
 
 	return ret;
 }
 
-static int t4ka3_enable_stream(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
+static int t4ka3_enable_stream(struct v4l2_subdev *sd,
+			       struct v4l2_subdev_state *state,
 			       u32 pad, u64 streams_mask)
 {
 	struct t4ka3_data *sensor = to_t4ka3_sensor(sd);
@@ -604,7 +577,7 @@ static int t4ka3_enable_stream(struct v4l2_subdev *sd, struct v4l2_subdev_state 
 	if (ret)
 		goto error_powerdown;
 
-	ret = t4ka3_set_mode(sensor);
+	ret = t4ka3_set_mode(sensor, state);
 	if (ret)
 		goto error_powerdown;
 
@@ -630,10 +603,12 @@ static int t4ka3_enable_stream(struct v4l2_subdev *sd, struct v4l2_subdev_state 
 
 error_powerdown:
 	pm_runtime_put(sensor->sd.dev);
+
 	return ret;
 }
 
-static int t4ka3_disable_stream(struct v4l2_subdev *sd, struct v4l2_subdev_state *state,
+static int t4ka3_disable_stream(struct v4l2_subdev *sd,
+				struct v4l2_subdev_state *state,
 				u32 pad, u64 streams_mask)
 {
 	struct t4ka3_data *sensor = to_t4ka3_sensor(sd);
@@ -642,7 +617,13 @@ static int t4ka3_disable_stream(struct v4l2_subdev *sd, struct v4l2_subdev_state
 	ret = cci_write(sensor->regmap, T4KA3_REG_STREAM, 0, NULL);
 	pm_runtime_put(sensor->sd.dev);
 	sensor->streaming = 0;
-	return ret;
+
+	if (ret)
+		dev_err(sensor->dev,
+			"failed to disable stream with return value: %d\n",
+			ret);
+
+	return 0;
 }
 
 static int t4ka3_get_selection(struct v4l2_subdev *sd,
@@ -707,7 +688,7 @@ static int t4ka3_set_selection(struct v4l2_subdev *sd,
 		format->width = rect.width;
 		format->height = rect.height;
 		if (sel->which == V4L2_SUBDEV_FORMAT_ACTIVE)
-			t4ka3_calc_mode(sensor);
+			t4ka3_calc_mode(sensor, format, crop);
 	}
 
 	sel->r = *crop = rect;
@@ -724,6 +705,7 @@ t4ka3_enum_mbus_code(struct v4l2_subdev *sd,
 		return -EINVAL;
 
 	code->code = MEDIA_BUS_FMT_SGRBG10_1X10;
+
 	return 0;
 }
 
@@ -756,14 +738,7 @@ static int t4ka3_check_hwcfg(struct t4ka3_data *sensor)
 	unsigned long link_freq_bitmap;
 	int ret;
 
-	/*
-	 * Sometimes the fwnode graph is initialized by the bridge driver.
-	 * Bridge drivers doing this may also add GPIO mappings, wait for this.
-	 */
 	endpoint = fwnode_graph_get_next_endpoint(fwnode, NULL);
-	if (!endpoint)
-		return dev_err_probe(sensor->dev, -EPROBE_DEFER,
-				     "waiting for fwnode graph endpoint\n");
 
 	ret = v4l2_fwnode_endpoint_alloc_parse(endpoint, &bus_cfg);
 	fwnode_handle_put(endpoint);
@@ -776,17 +751,8 @@ static int t4ka3_check_hwcfg(struct t4ka3_data *sensor)
 				       ARRAY_SIZE(link_freq_menu_items),
 				       &link_freq_bitmap);
 
-	if (ret == -ENOENT) {
-		dev_err_probe(sensor->dev, -ENOENT,
-			      "No match found between driver-supported link frequencies.\n");
+	if (ret < 0)
 		goto out_free_bus_cfg;
-	}
-
-	if (ret == -ENODATA) {
-		dev_err_probe(sensor->dev, -ENODATA,
-			      "No link frequency was specified in the firmware.\n");
-		goto out_free_bus_cfg;
-	}
 
 	sensor->link_freq_index = ffs(link_freq_bitmap) - 1;
 
@@ -850,6 +816,9 @@ static int t4ka3_init_controls(struct t4ka3_data *sensor)
 {
 	const struct v4l2_ctrl_ops *ops = &t4ka3_ctrl_ops;
 	struct t4ka3_ctrls *ctrls = &sensor->ctrls;
+	struct v4l2_subdev_state *state;
+	struct v4l2_mbus_framefmt *fmt;
+	struct v4l2_rect *crop;
 	struct v4l2_ctrl_handler *hdl = &ctrls->handler;
 	struct v4l2_fwnode_device_properties props;
 	int ret, min, max, def;
@@ -868,28 +837,36 @@ static int t4ka3_init_controls(struct t4ka3_data *sensor)
 	ctrls->vflip = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_VFLIP, 0, 1, 1, 0);
 	ctrls->hflip = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HFLIP, 0, 1, 1, 0);
 
-	ctrls->test_pattern = v4l2_ctrl_new_std_menu_items(hdl, ops,
-							   V4L2_CID_TEST_PATTERN,
-							   ARRAY_SIZE(test_pattern_menu) - 1,
-							   0, 0, test_pattern_menu);
-	ctrls->link_freq = v4l2_ctrl_new_int_menu(hdl, NULL, V4L2_CID_LINK_FREQ,
-						  0, 0, sensor->link_freq);
+	ctrls->test_pattern =
+		v4l2_ctrl_new_std_menu_items(hdl, ops,
+					     V4L2_CID_TEST_PATTERN,
+					     ARRAY_SIZE(test_pattern_menu) - 1,
+					     0, 0, test_pattern_menu);
+	ctrls->link_freq = v4l2_ctrl_new_int_menu(hdl, NULL,
+						  V4L2_CID_LINK_FREQ,
+						  0, 0, link_freq_menu_items);
 	ctrls->pixel_rate = v4l2_ctrl_new_std(hdl, NULL, V4L2_CID_PIXEL_RATE,
 					      0, T4KA3_PIXEL_RATE,
 					      1, T4KA3_PIXEL_RATE);
 
-	v4l2_subdev_lock_state(sensor->sd.active_state);
-	t4ka3_calc_mode(sensor);
-	t4ka3_get_vblank_limits(sensor, &min, &max, &def);
-	v4l2_subdev_unlock_state(sensor->sd.active_state);
+	state = v4l2_subdev_lock_and_get_active_state(&sensor->sd);
+	fmt = v4l2_subdev_state_get_format(state, 0);
+	crop = v4l2_subdev_state_get_crop(state, 0);
 
-	ctrls->vblank = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_VBLANK, min, max, 1, def);
+	t4ka3_calc_mode(sensor, fmt, crop);
+	t4ka3_get_vblank_limits(sensor, state, &min, &max, &def);
+
+	v4l2_subdev_unlock_state(state);
+
+	ctrls->vblank = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_VBLANK,
+					  min, max, 1, def);
 
 	def = T4KA3_PIXELS_PER_LINE - T4KA3_ACTIVE_WIDTH;
 	ctrls->hblank = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_HBLANK,
 					  def, def, 1, def);
 
-	max = T4KA3_LINES_PER_FRAME_30FPS - T4KA3_COARSE_INTEGRATION_TIME_MARGIN;
+	max = T4KA3_LINES_PER_FRAME_30FPS -
+	      T4KA3_COARSE_INTEGRATION_TIME_MARGIN;
 	ctrls->exposure = v4l2_ctrl_new_std(hdl, ops, V4L2_CID_EXPOSURE,
 					    0, max, 1, max);
 
@@ -913,6 +890,7 @@ static int t4ka3_init_controls(struct t4ka3_data *sensor)
 	ctrls->hblank->flags |= V4L2_CTRL_FLAG_READ_ONLY;
 
 	sensor->sd.ctrl_handler = hdl;
+
 	return 0;
 }
 
@@ -938,18 +916,22 @@ static int t4ka3_pm_resume(struct device *dev)
 	gpiod_set_value_cansleep(sensor->reset_gpio, 0);
 
 	/* waiting for the sensor after powering up */
-	msleep(20);
+	fsleep(20000);
 
 	ret = t4ka3_detect(sensor, &sensor_id);
 	if (ret) {
 		dev_err(sensor->dev, "sensor detect failed\n");
+		gpiod_set_value_cansleep(sensor->powerdown_gpio, 1);
+		gpiod_set_value_cansleep(sensor->reset_gpio, 1);
+
 		return ret;
 	}
 
 	return 0;
 }
 
-static DEFINE_RUNTIME_DEV_PM_OPS(t4ka3_pm_ops, t4ka3_pm_suspend, t4ka3_pm_resume, NULL);
+static DEFINE_RUNTIME_DEV_PM_OPS(t4ka3_pm_ops, t4ka3_pm_suspend,
+				 t4ka3_pm_resume, NULL);
 
 static void t4ka3_remove(struct i2c_client *client)
 {
@@ -989,15 +971,14 @@ static int t4ka3_probe(struct i2c_client *client)
 
 	mutex_init(&sensor->lock);
 
-	sensor->link_freq[0] = T4KA3_LINK_FREQ;
-
 	v4l2_i2c_subdev_init(&sensor->sd, client, &t4ka3_ops);
 	sensor->sd.internal_ops = &t4ka3_internal_ops;
 
 	sensor->powerdown_gpio = devm_gpiod_get(&client->dev, "powerdown",
 						GPIOD_OUT_HIGH);
 	if (IS_ERR(sensor->powerdown_gpio))
-		return dev_err_probe(&client->dev, PTR_ERR(sensor->powerdown_gpio),
+		return dev_err_probe(&client->dev,
+				     PTR_ERR(sensor->powerdown_gpio),
 				     "getting powerdown GPIO\n");
 
 	sensor->reset_gpio = devm_gpiod_get_optional(&client->dev, "reset",
@@ -1015,7 +996,6 @@ static int t4ka3_probe(struct i2c_client *client)
 		return ret;
 
 	pm_runtime_set_active(&client->dev);
-	pm_runtime_get_noresume(&client->dev);
 	pm_runtime_enable(&client->dev);
 
 	sensor->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
@@ -1042,8 +1022,7 @@ static int t4ka3_probe(struct i2c_client *client)
 		goto err_controls;
 
 	pm_runtime_set_autosuspend_delay(&client->dev, 1000);
-	pm_runtime_use_autosuspend(&client->dev);
-	pm_runtime_put_autosuspend(&client->dev);
+	pm_runtime_idle(&client->dev);
 
 	return 0;
 
@@ -1062,7 +1041,7 @@ err_pm_disable:
 	return ret;
 }
 
-static struct acpi_device_id t4ka3_acpi_match[] = {
+static const struct acpi_device_id t4ka3_acpi_match[] = {
 	{ "XMCC0003" },
 	{}
 };

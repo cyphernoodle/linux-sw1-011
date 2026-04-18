@@ -367,7 +367,7 @@ static int setup_metric_events(const char *pmu, struct hashmap *ids,
 static bool match_metric_or_groups(const char *metric_or_groups, const char *sought)
 {
 	int len;
-	char *m;
+	const char *m;
 
 	if (!sought)
 		return false;
@@ -450,11 +450,10 @@ static const char *code_characters = ",-=@";
 
 static int encode_metric_id(struct strbuf *sb, const char *x)
 {
-	char *c;
 	int ret = 0;
 
 	for (; *x; x++) {
-		c = strchr(code_characters, *x);
+		const char *c = strchr(code_characters, *x);
 		if (c) {
 			ret = strbuf_addch(sb, '!');
 			if (ret)
@@ -1606,9 +1605,9 @@ bool metricgroup__has_metric_or_groups(const char *pmu, const char *metric_or_gr
 		.metric_or_groups = metric_or_groups,
 	};
 
-	return pmu_metrics_table__for_each_metric(table,
-						  metricgroup__has_metric_or_groups_callback,
-						  &data)
+	return metricgroup__for_each_metric(table,
+					    metricgroup__has_metric_or_groups_callback,
+					    &data)
 		? true : false;
 }
 

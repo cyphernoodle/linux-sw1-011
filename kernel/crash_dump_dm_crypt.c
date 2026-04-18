@@ -168,8 +168,8 @@ static int read_key_from_user_keying(struct dm_crypt_key *dm_key)
 
 	memcpy(dm_key->data, ukp->data, ukp->datalen);
 	dm_key->key_size = ukp->datalen;
-	kexec_dprintk("Get dm crypt key (size=%u) %s: %8ph\n", dm_key->key_size,
-		      dm_key->key_desc, dm_key->data);
+	kexec_dprintk("Get dm crypt key (size=%u) %s\n", dm_key->key_size,
+		      dm_key->key_desc);
 
 out:
 	up_read(&key->sem);
@@ -232,7 +232,7 @@ static void config_key_release(struct config_item *item)
 	key_count--;
 }
 
-static struct configfs_item_operations config_key_item_ops = {
+static const struct configfs_item_operations config_key_item_ops = {
 	.release = config_key_release,
 };
 
@@ -252,7 +252,7 @@ static struct config_item *config_keys_make_item(struct config_group *group,
 		return ERR_PTR(-EINVAL);
 	}
 
-	config_key = kzalloc(sizeof(struct config_key), GFP_KERNEL);
+	config_key = kzalloc_obj(struct config_key);
 	if (!config_key)
 		return ERR_PTR(-ENOMEM);
 
@@ -307,7 +307,7 @@ static struct configfs_attribute *config_keys_attrs[] = {
  * Note that, since no extra work is required on ->drop_item(),
  * no ->drop_item() is provided.
  */
-static struct configfs_group_operations config_keys_group_ops = {
+static const struct configfs_group_operations config_keys_group_ops = {
 	.make_item = config_keys_make_item,
 };
 

@@ -553,6 +553,13 @@
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
+		vreg_l7b_2p8: ldo7 {
+			regulator-name = "vreg_l7b_2p8";
+			regulator-min-microvolt = <2800000>;
+			regulator-max-microvolt = <2800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
 		vreg_l8b_3p0: ldo8 {
 			regulator-name = "vreg_l8b_3p0";
 			regulator-min-microvolt = <3072000>;
@@ -834,14 +841,14 @@
 		};
 
 		vreg_l5m_2p8: ldo5 {
-			regulator-name = "vreg_l5m_2p9";
+			regulator-name = "vreg_l5m_2p8";
 			regulator-min-microvolt = <2800000>;
 			regulator-max-microvolt = <3072000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
 		vreg_l7m_2p8: ldo7 {
-			regulator-name = "vreg_l7m_2p9";
+			regulator-name = "vreg_l7m_2p8";
 			regulator-min-microvolt = <2800000>;
 			regulator-max-microvolt = <3072000>;
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
@@ -868,8 +875,7 @@
 		 * port3 => csiphy4
 		 */
 		port@3 {
-			csiphy4_ep: endpoint@4 {
-				reg = <4>;
+			camss_csiphy4_inep0: endpoint@0 {
 				clock-lanes = <7>;
 				data-lanes = <0 1>;
 				remote-endpoint = <&ov02c10_ep>;
@@ -897,24 +903,23 @@
 
 		orientation = <0>; /* front facing */
 
-		avdd-supply = <&vreg_l7m_2p8>;
-		dvdd-supply = <&vreg_l2m_1p2>;
-		dovdd-supply = <&vreg_l4m_1p8>;
+		avdd-supply = <&vreg_l7b_2p8>;
+		dvdd-supply = <&vreg_l1m_1p2>;
+		dovdd-supply = <&vreg_l3m_1p8>;
 
 		port {
 			ov02c10_ep: endpoint {
 				data-lanes = <1 2>;
 				link-frequencies = /bits/ 64 <400000000>;
-				remote-endpoint = <&csiphy4_ep>;
+				remote-endpoint = <&camss_csiphy4_inep0>;
 			};
 		};
 	};
 };
 
 &csiphy4 {
-	vdda-0p8-supply = <&vreg_l2c_0p8>;
+	vdda-0p9-supply = <&vreg_l2c_0p8>;
 	vdda-1p2-supply = <&vreg_l1c_1p2>;
-	phy-type = <PHY_TYPE_DPHY>;
 
 	status = "okay";
 };
@@ -1240,9 +1245,6 @@
 };
 
 &pcie4 {
-	perst-gpios = <&tlmm 146 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 148 GPIO_ACTIVE_LOW>;
-
 	pinctrl-0 = <&pcie4_default>;
 	pinctrl-names = "default";
 
@@ -1257,6 +1259,9 @@
 };
 
 &pcie4_port0 {
+	reset-gpios = <&tlmm 146 GPIO_ACTIVE_LOW>;
+	wake-gpios = <&tlmm 148 GPIO_ACTIVE_LOW>;
+
 	wifi@0 {
 		compatible = "pci17cb,1107";
 		reg = <0x10000 0x0 0x0 0x0 0x0>;
@@ -1274,9 +1279,6 @@
 };
 
 &pcie6a {
-	perst-gpios = <&tlmm 152 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 154 GPIO_ACTIVE_LOW>;
-
 	vddpe-3v3-supply = <&vreg_nvme>;
 
 	pinctrl-0 = <&pcie6a_default>;
@@ -1290,6 +1292,11 @@
 	vdda-pll-supply = <&vreg_l2j_1p2>;
 
 	status = "okay";
+};
+
+&pcie6a_port0 {
+	reset-gpios = <&tlmm 152 GPIO_ACTIVE_LOW>;
+	wake-gpios = <&tlmm 154 GPIO_ACTIVE_LOW>;
 };
 
 &pm8550_gpios {

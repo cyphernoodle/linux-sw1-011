@@ -469,7 +469,7 @@ static int evdev_open(struct inode *inode, struct file *file)
 	struct evdev_client *client;
 	int error;
 
-	client = kvzalloc(struct_size(client, buffer, bufsize), GFP_KERNEL);
+	client = kvzalloc_flex(*client, buffer, bufsize);
 	if (!client)
 		return -ENOMEM;
 
@@ -1349,7 +1349,7 @@ static int evdev_connect(struct input_handler *handler, struct input_dev *dev,
 		return error;
 	}
 
-	evdev = kzalloc(sizeof(struct evdev), GFP_KERNEL);
+	evdev = kzalloc_obj(struct evdev);
 	if (!evdev) {
 		error = -ENOMEM;
 		goto err_free_minor;

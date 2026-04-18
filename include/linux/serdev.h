@@ -62,6 +62,7 @@ struct serdev_device_driver {
 	struct device_driver driver;
 	int	(*probe)(struct serdev_device *);
 	void	(*remove)(struct serdev_device *);
+	void	(*shutdown)(struct serdev_device *);
 };
 
 #define to_serdev_device_driver(d) container_of_const(d, struct serdev_device_driver, driver)

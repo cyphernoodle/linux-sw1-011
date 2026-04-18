@@ -17,20 +17,81 @@ description:
 
 properties:
   compatible:
-    oneOf:
-      - items:
-          - enum:
-              - pcie-m2-1620-lga-connector
-          - const: pcie-m2-e-connector
-      - items:
-          - enum:
-              - pcie-m2-e-connector
+    const: pcie-m2-e-connector
 
   vpcie3v3-supply:
     description: A phandle to the regulator for 3.3v supply.
 
   vpcie1v8-supply:
     description: A phandle to the regulator for VIO 1.8v supply.
+
+  i2c-parent:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: I2C interface
+
+  clocks:
+    description: 32.768 KHz Suspend Clock (SUSCLK) input from the host system to
+      the M.2 card. Refer, PCI Express M.2 Specification r4.0, sec 3.1.12.1 for
+      more details.
+    maxItems: 1
+
+  w-disable1-gpios:
+    description: GPIO output to W_DISABLE1# signal. This signal is used by the
+      host system to disable WiFi radio in the M.2 card. Refer, PCI Express M.2
+      Specification r4.0, sec 3.1.12.3 for more details.
+    maxItems: 1
+
+  w-disable2-gpios:
+    description: GPIO output to W_DISABLE2# signal. This signal is used by the
+      host system to disable BT radio in the M.2 card. Refer, PCI Express M.2
+      Specification r4.0, sec 3.1.12.3 for more details.
+    maxItems: 1
+
+  viocfg-gpios:
+    description: GPIO input to IO voltage configuration (VIO_CFG) signal. The
+      card drives this signal to indicate to the host system whether the card
+      supports an independent IO voltage domain for sideband signals. Refer,
+      PCI Express M.2 Specification r4.0, sec 3.1.15.1 for more details.
+    maxItems: 1
+
+  uart-wake-gpios:
+    description: GPIO input to UART_WAKE# signal. The card asserts this signal
+      to wake the host system and initiate UART interface communication. Refer,
+      PCI Express M.2 Specification r4.0, sec 3.1.8.1 for more details.
+    maxItems: 1
+
+  sdio-wake-gpios:
+    description: GPIO input to SDIO_WAKE# signal. The card asserts this signal
+      to wake the host system and initiate SDIO interface communication. Refer,
+      PCI Express M.2 Specification r4.0, sec 3.1.7 for more details.
+    maxItems: 1
+
+  sdio-reset-gpios:
+    description: GPIO output to SDIO_RESET# signal. This signal is used by the
+      host system to reset SDIO interface of the M.2 card. Refer, PCI Express
+      M.2 Specification r4.0, sec 3.1.7 for more details.
+    maxItems: 1
+
+  vendor-porta-gpios:
+    description: GPIO for the first vendor specific signal (VENDOR_PORTA). This
+      signal's functionality is defined by the card manufacturer and may be
+      used for proprietary features. Refer the card vendor's documentation for
+      details.
+    maxItems: 1
+
+  vendor-portb-gpios:
+    description: GPIO for the second vendor specific signal (VENDOR_PORTB). This
+      signal's functionality is defined by the card manufacturer and may be
+      used for proprietary features. Refer the card vendor's documentation for
+      details.
+    maxItems: 1
+
+  vendor-portc-gpios:
+    description: GPIO for the third vendor specific signal (VENDOR_PORTC). This
+      signal's functionality is defined by the card manufacturer and may be
+      used for proprietary features. Refer the card vendor's documentation for
+      details.
+    maxItems: 1
 
   ports:
     $ref: /schemas/graph.yaml#/properties/ports
@@ -41,78 +102,35 @@ properties:
     properties:
       port@0:
         $ref: /schemas/graph.yaml#/properties/port
-        description: Connector interfaces for Wi-Fi
-
-        properties:
-          endpoint@0:
-            $ref: /schemas/graph.yaml#/properties/endpoint
-            description: PCIe interface
-
-          endpoint@1:
-            $ref: /schemas/graph.yaml#/properties/endpoint
-            description: SDIO interface
-
-        anyOf:
-          - required:
-              - endpoint@0
-          - required:
-              - endpoint@1
+        description: PCIe interface for Wi-Fi
 
       port@1:
         $ref: /schemas/graph.yaml#/properties/port
-        description: Connector interfaces for BT
-
-        properties:
-          endpoint@0:
-            $ref: /schemas/graph.yaml#/properties/endpoint
-            description: USB 2.0 interface
-
-          endpoint@1:
-            $ref: /schemas/graph.yaml#/properties/endpoint
-            description: UART interface
-
-        anyOf:
-          - required:
-              - endpoint@0
-          - required:
-              - endpoint@1
+        description: SDIO interface for Wi-Fi
 
       port@2:
         $ref: /schemas/graph.yaml#/properties/port
+        description: USB 2.0 interface for BT
+
+      port@3:
+        $ref: /schemas/graph.yaml#/properties/port
+        description: UART interface for BT
+
+      port@4:
+        $ref: /schemas/graph.yaml#/properties/port
         description: PCM/I2S interface
 
-      i2c-parent:
-        $ref: /schemas/types.yaml#/definitions/phandle
-        description: I2C interface
-
-    oneOf:
-      - required:
-          - port@0
-
-  clocks:
-    description: 32.768 KHz Suspend Clock (SUSCLK) input from the host system to
-      the M.2 card. Refer, PCI Express M.2 Specification r4.0, sec 3.1.12.1 for
-      more details.
-    maxItems: 1
-
-  w-disable1-gpios:
-    description: GPIO input to W_DISABLE1# signal. This signal is used by the
-      system to disable WiFi radio in the M.2 card. Refer, PCI Express M.2
-      Specification r4.0, sec 3.1.12.3 for more details.
-    maxItems: 1
-
-  w-disable2-gpios:
-    description: GPIO input to W_DISABLE2# signal. This signal is used by the
-      system to disable WiFi radio in the M.2 card. Refer, PCI Express M.2
-      Specification r4.0, sec 3.1.12.3 for more details.
-    maxItems: 1
-
-  viocfg-gpios:
-    description: GPIO output to IO voltage configuration (VIO_CFG) signal. This
-      signal is used by the M.2 card to indicate to the host system that the
-      card supports an independent IO voltage domain for the sideband signals.
-      Refer, PCI Express M.2 Specification r4.0, sec 3.1.15.1 for more details.
-    maxItems: 1
+    anyOf:
+      - anyOf:
+          - required:
+              - port@0
+          - required:
+              - port@1
+      - anyOf:
+          - required:
+              - port@2
+          - required:
+              - port@3
 
 required:
   - compatible
@@ -129,8 +147,13 @@ examples:
         compatible = "pcie-m2-e-connector";
         vpcie3v3-supply = <&vreg_wcn_3p3>;
         vpcie1v8-supply = <&vreg_l15b_1p8>;
-        w-disable1-gpios = <&tlmm 117 GPIO_ACTIVE_LOW>;
+        i2c-parent = <&i2c0>;
+        w-disable1-gpios = <&tlmm 115 GPIO_ACTIVE_LOW>;
         w-disable2-gpios = <&tlmm 116 GPIO_ACTIVE_LOW>;
+        viocfg-gpios = <&tlmm 117 GPIO_ACTIVE_HIGH>;
+        uart-wake-gpios = <&tlmm 118 GPIO_ACTIVE_LOW>;
+        sdio-wake-gpios = <&tlmm 119 GPIO_ACTIVE_LOW>;
+        sdio-reset-gpios = <&tlmm 120 GPIO_ACTIVE_LOW>;
 
         ports {
             #address-cells = <1>;
@@ -147,13 +170,13 @@ examples:
                 };
             };
 
-            port@1 {
-                reg = <1>;
+            port@3 {
+                reg = <3>;
                 #address-cells = <1>;
                 #size-cells = <0>;
 
-                endpoint@1 {
-                    reg = <1>;
+                endpoint@0 {
+                    reg = <0>;
                     remote-endpoint = <&uart14_ep>;
                 };
             };

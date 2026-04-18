@@ -7,6 +7,7 @@
 /dts-v1/;
 
 #include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/iio/qcom,spmi-adc7-pm8350.h>
 #include <dt-bindings/input/gpio-keys.h>
 #include <dt-bindings/input/input.h>
 #include <dt-bindings/leds/common.h>
@@ -40,20 +41,80 @@
 		};
 	};
 
+	/* Display-mounted sensors */
+	i2c-sensors1 {
+		compatible = "i2c-gpio";
+		i2c-gpio,delay-us = <2>;
+
+		scl-gpios = <&tlmm 232 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		sda-gpios = <&tlmm 231 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+
+		pinctrl-0 = <&sensors_i2c_display_default>;
+		pinctrl-names = "default";
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		accelerometer@18 {
+			compatible = "st,lis2dw12";
+			reg = <0x18>;
+
+			interrupts-extended = <&tlmm 29 IRQ_TYPE_LEVEL_LOW>;
+			pinctrl-0 = <&acc_display_int_n_default>;
+			pinctrl-names = "default";
+
+			mount-matrix = "-1", "0", "0",
+				       "0", "1", "0",
+				       "0", "0", "-1";
+		};
+
+		/* AMS TCS3530 @ 0x39, IRQ 93 */
+	};
+
+	/* Motherboard-mounted sensors */
+	i2c-sensors2 {
+		compatible = "i2c-gpio";
+		i2c-gpio,delay-us = <2>;
+
+		scl-gpios = <&tlmm 216 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+		sda-gpios = <&tlmm 215 (GPIO_ACTIVE_HIGH | GPIO_OPEN_DRAIN)>;
+
+		pinctrl-0 = <&sensors_i2c_mobo_default>;
+		pinctrl-names = "default";
+
+		#address-cells = <1>;
+		#size-cells = <0>;
+
+		accelerometer@18 {
+			compatible = "st,lis2dw12";
+			reg = <0x18>;
+
+			interrupts-extended = <&tlmm 28 IRQ_TYPE_LEVEL_LOW>;
+			pinctrl-0 = <&acc_mobo_int_n_default>;
+			pinctrl-names = "default";
+
+			vdd-supply = <&vreg_l10b_1p8>;
+			vddio-supply = <&vreg_l10b_1p8>;
+
+			mount-matrix = "0", "1", "0",
+				       "0", "0", "1",
+				       "1", "0", "0";
+		};
+	};
+
 	leds {
 		compatible = "gpio-leds";
 
 		pinctrl-names = "default";
 		pinctrl-0 = <&cam_indicator_en>;
 
-		led-camera-indicator {
+		privacy_led: led-camera-indicator {
 			label = "white:camera-indicator";
 			function = LED_FUNCTION_INDICATOR;
 			color = <LED_COLOR_ID_WHITE>;
 			gpios = <&tlmm 110 GPIO_ACTIVE_HIGH>;
 			linux,default-trigger = "none";
 			default-state = "off";
-			/* Reuse as a panic indicator until we get a "camera on" trigger */
 			panic-indicator;
 		};
 	};
@@ -524,6 +585,13 @@
 			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
 		};
 
+		vreg_l10b_1p8: ldo10 {
+			regulator-name = "vreg_l10b_1p8";
+			regulator-min-microvolt = <1800000>;
+			regulator-max-microvolt = <1800000>;
+			regulator-initial-mode = <RPMH_REGULATOR_MODE_HPM>;
+		};
+
 		vreg_l12b_1p2: ldo12 {
 			regulator-name = "vreg_l12b_1p2";
 			regulator-min-microvolt = <1200000>;
@@ -794,6 +862,9 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&cam_rgb_default>;
 
+		leds = <&privacy_led>;
+		led-names = "privacy";
+
 		clocks = <&camcc CAM_CC_MCLK4_CLK>;
 		assigned-clocks = <&camcc CAM_CC_MCLK4_CLK>;
 		assigned-clock-rates = <19200000>;
@@ -900,8 +971,32 @@
 
 &i2c5 {
 	clock-frequency = <100000>;
-	status = "disabled";
-	/* EC @0x3b */
+	status = "okay";
+
+	embedded-controller@3b {
+		compatible = "dell,xps13-9345-ec";
+		reg = <0x3b>;
+
+		interrupts-extended = <&tlmm 66 IRQ_TYPE_LEVEL_LOW>;
+
+		pinctrl-0 = <&ec_int_n_default>;
+		pinctrl-names = "default";
+
+		io-channels = <&pmk8550_vadc PM8350_ADC7_GPIO3_100K_PU(1)>,
+			      <&pmk8550_vadc PM8350_ADC7_GPIO4_100K_PU(1)>,
+			      <&pmk8550_vadc PM8350_ADC7_AMUX_THM1_100K_PU(1)>,
+			      <&pmk8550_vadc PM8350_ADC7_AMUX_THM2_100K_PU(1)>,
+			      <&pmk8550_vadc PM8350_ADC7_AMUX_THM3_100K_PU(1)>,
+			      <&pmk8550_vadc PM8350_ADC7_AMUX_THM4_100K_PU(1)>,
+			      <&pmk8550_vadc PM8350_ADC7_AMUX_THM5_100K_PU(1)>;
+		io-channel-names = "sys_therm0",
+				   "sys_therm1",
+				   "sys_therm2",
+				   "sys_therm3",
+				   "sys_therm4",
+				   "sys_therm5",
+				   "sys_therm6";
+	};
 };
 
 &i2c7 {
@@ -1108,9 +1203,6 @@
 };
 
 &pcie4 {
-	perst-gpios = <&tlmm 146 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 148 GPIO_ACTIVE_LOW>;
-
 	pinctrl-0 = <&pcie4_default>;
 	pinctrl-names = "default";
 
@@ -1125,6 +1217,9 @@
 };
 
 &pcie4_port0 {
+	reset-gpios = <&tlmm 146 GPIO_ACTIVE_LOW>;
+	wake-gpios = <&tlmm 148 GPIO_ACTIVE_LOW>;
+
 	wifi@0 {
 		compatible = "pci17cb,1107";
 		reg = <0x10000 0x0 0x0 0x0 0x0>;
@@ -1142,9 +1237,6 @@
 };
 
 &pcie6a {
-	perst-gpios = <&tlmm 152 GPIO_ACTIVE_LOW>;
-	wake-gpios = <&tlmm 154 GPIO_ACTIVE_LOW>;
-
 	vddpe-3v3-supply = <&vreg_nvme>;
 
 	pinctrl-0 = <&pcie6a_default>;
@@ -1158,6 +1250,11 @@
 	vdda-pll-supply = <&vreg_l2j_1p2>;
 
 	status = "okay";
+};
+
+&pcie6a_port0 {
+	reset-gpios = <&tlmm 152 GPIO_ACTIVE_LOW>;
+	wake-gpios = <&tlmm 154 GPIO_ACTIVE_LOW>;
 };
 
 &pm8550_gpios {
@@ -1187,6 +1284,64 @@
 		pins = "gpio8";
 		function = "normal";
 		power-source = <1>; /* 1.8V */
+	};
+};
+
+&pmk8550_vadc {
+	/* Around DRAM */
+	channel@14c {
+		reg = <PM8350_ADC7_GPIO3_100K_PU(1)>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "sys_therm0";
+	};
+
+	/* Around left Type-C charging controller */
+	channel@14d {
+		reg = <PM8350_ADC7_GPIO4_100K_PU(1)>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "sys_therm1";
+	};
+
+	/* Around upper-left side of motherboard */
+	channel@144 {
+		reg = <PM8350_ADC7_AMUX_THM1_100K_PU(1)>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "sys_therm2";
+	};
+
+	/* Around right Type-C charging controller */
+	channel@145 {
+		reg = <PM8350_ADC7_AMUX_THM2_100K_PU(1)>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "sys_therm3";
+	};
+
+	/* Around SSD connector */
+	channel@146 {
+		reg = <PM8350_ADC7_AMUX_THM3_100K_PU(1)>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "sys_therm4";
+	};
+
+	/* Around battery charging circuit */
+	channel@147 {
+		reg = <PM8350_ADC7_AMUX_THM4_100K_PU(1)>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "sys_therm5";
+	};
+
+	/* Around keyboard */
+	channel@148 {
+		reg = <PM8350_ADC7_AMUX_THM5_100K_PU(1)>;
+		qcom,hw-settle-time = <200>;
+		qcom,ratiometric;
+		label = "sys_therm6";
 	};
 };
 
@@ -1298,8 +1453,28 @@
 
 &tlmm {
 	gpio-reserved-ranges = <44 4>,  /* SPI11 (TPM) */
+			       <65 1>,  /* EC Reset, accessible but yields system unusable */
 			       <76 4>,  /* SPI19 (TZ Protected) */
 			       <238 1>; /* UFS Reset */
+
+	acc_display_int_n_default: acc-display-int-n-state {
+		pins = "gpio29";
+		function = "gpio";
+		bias-pull-up;
+	};
+
+	acc_mobo_int_n_default: acc-mobo-int-n-state {
+		pins = "gpio28";
+		function = "gpio";
+		bias-pull-up;
+	};
+
+	cam_indicator_en: cam-indicator-en-state {
+		pins = "gpio110";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
 
 	cam_rgb_default: cam-rgb-default-state {
 		mclk-pins {
@@ -1318,10 +1493,9 @@
 		};
 	};
 
-	cam_indicator_en: cam-indicator-en-state {
-		pins = "gpio110";
+	ec_int_n_default: ec-int-n-state {
+		pins = "gpio66";
 		function = "gpio";
-		drive-strength = <2>;
 		bias-disable;
 	};
 
@@ -1443,6 +1617,20 @@
 
 	rtmr1_default: rtmr1-reset-n-active-state {
 		pins = "gpio176";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	sensors_i2c_display_default: sensors-i2c-display-state {
+		pins = "gpio231", "gpio232";
+		function = "gpio";
+		drive-strength = <2>;
+		bias-disable;
+	};
+
+	sensors_i2c_mobo_default: sensors-i2c-mobo-state {
+		pins = "gpio215", "gpio216";
 		function = "gpio";
 		drive-strength = <2>;
 		bias-disable;

@@ -4,7 +4,6 @@
  * Author: Manivannan Sadhasivam <manivannan.sadhasivam@oss.qualcomm.com>
  */
 
-#include <linux/err.h>
 #include <linux/device.h>
 #include <linux/delay.h>
 #include <linux/gpio/consumer.h>
@@ -30,12 +29,12 @@ struct pwrseq_pcie_m2_ctx {
 	const struct pwrseq_pcie_m2_pdata *pdata;
 	struct regulator_bulk_data *regs;
 	size_t num_vregs;
+	struct notifier_block nb;
 	struct gpio_desc *w_disable1_gpio;
 	struct gpio_desc *w_disable2_gpio;
-	struct device *dev;
 	struct serdev_device *serdev;
-	struct notifier_block nb;
 	struct of_changeset *ocs;
+	struct device *dev;
 };
 
 static int pwrseq_pcie_m2_vregs_enable(struct pwrseq_device *pwrseq)
@@ -178,17 +177,6 @@ static int pwrseq_pcie_m2_match(struct pwrseq_device *pwrseq,
 	return PWRSEQ_NO_MATCH;
 }
 
-static void pwrseq_pcie_free_resources(void *data)
-{
-	struct pwrseq_pcie_m2_ctx *ctx = data;
-
-	serdev_device_remove(ctx->serdev);
-	of_changeset_revert(ctx->ocs);
-	of_changeset_destroy(ctx->ocs);
-	bus_unregister_notifier(&pci_bus_type, &ctx->nb);
-	regulator_bulk_free(ctx->num_vregs, ctx->regs);
-}
-
 static int pwrseq_m2_pcie_create_bt_node(struct pwrseq_pcie_m2_ctx *ctx,
 					struct device_node *parent)
 {
@@ -196,7 +184,7 @@ static int pwrseq_m2_pcie_create_bt_node(struct pwrseq_pcie_m2_ctx *ctx,
 	struct device_node *np;
 	int ret;
 
-	ctx->ocs = devm_kzalloc(dev, sizeof(*ctx->ocs), GFP_KERNEL);
+	ctx->ocs = kzalloc_obj(*ctx->ocs);
 	if (!ctx->ocs)
 		return -ENOMEM;
 
@@ -233,8 +221,82 @@ err_revert_changeset:
 	of_changeset_revert(ctx->ocs);
 err_destroy_changeset:
 	of_changeset_destroy(ctx->ocs);
+	kfree(ctx->ocs);
+	ctx->ocs = NULL;
 
 	return ret;
+}
+
+static int pwrseq_pcie_m2_create_serdev(struct pwrseq_pcie_m2_ctx *ctx)
+{
+	struct serdev_controller *serdev_ctrl;
+	struct device *dev = ctx->dev;
+	int ret;
+
+	struct device_node *serdev_parent __free(device_node) =
+		of_graph_get_remote_node(dev_of_node(ctx->dev), 3, 0);
+	if (!serdev_parent)
+		return 0;
+
+	serdev_ctrl = of_find_serdev_controller_by_node(serdev_parent);
+	if (!serdev_ctrl)
+		return 0;
+
+	/* Bail out if the device was already attached to this controller */
+	if (serdev_ctrl->serdev) {
+		serdev_controller_put(serdev_ctrl);
+		return 0;
+	}
+
+	ctx->serdev = serdev_device_alloc(serdev_ctrl);
+	if (!ctx->serdev) {
+		ret = -ENOMEM;
+		goto err_put_ctrl;
+	}
+
+	ret = pwrseq_m2_pcie_create_bt_node(ctx, serdev_parent);
+	if (ret)
+		goto err_free_serdev;
+
+	ret = serdev_device_add(ctx->serdev);
+	if (ret) {
+		dev_err(dev, "Failed to add serdev for WCN7850: %d\n", ret);
+		goto err_free_dt_node;
+	}
+
+	serdev_controller_put(serdev_ctrl);
+
+	return 0;
+
+err_free_dt_node:
+	device_remove_of_node(&ctx->serdev->dev);
+	of_changeset_revert(ctx->ocs);
+	of_changeset_destroy(ctx->ocs);
+	kfree(ctx->ocs);
+	ctx->ocs = NULL;
+err_free_serdev:
+	serdev_device_put(ctx->serdev);
+	ctx->serdev = NULL;
+err_put_ctrl:
+	serdev_controller_put(serdev_ctrl);
+
+	return ret;
+}
+
+static void pwrseq_pcie_m2_remove_serdev(struct pwrseq_pcie_m2_ctx *ctx)
+{
+	if (ctx->serdev) {
+		device_remove_of_node(&ctx->serdev->dev);
+		serdev_device_remove(ctx->serdev);
+		ctx->serdev = NULL;
+	}
+
+	if (ctx->ocs) {
+		of_changeset_revert(ctx->ocs);
+		of_changeset_destroy(ctx->ocs);
+		kfree(ctx->ocs);
+		ctx->ocs = NULL;
+	}
 }
 
 static int pwrseq_m2_pcie_notify(struct notifier_block *nb, unsigned long action,
@@ -242,9 +304,6 @@ static int pwrseq_m2_pcie_notify(struct notifier_block *nb, unsigned long action
 {
 	struct pwrseq_pcie_m2_ctx *ctx = container_of(nb, struct pwrseq_pcie_m2_ctx, nb);
 	struct pci_dev *pdev = to_pci_dev(data);
-	struct serdev_controller *serdev_ctrl;
-	struct device *dev = ctx->dev;
-	struct device_node *pci_parent;
 	int ret;
 
 	/*
@@ -252,53 +311,25 @@ static int pwrseq_m2_pcie_notify(struct notifier_block *nb, unsigned long action
 	 * not, by comparing the OF node of the PCI device parent and the Port 0
 	 * (PCIe) remote node parent OF node.
 	 */
-	pci_parent = of_graph_get_remote_node(dev_of_node(ctx->dev), 0, 0);
-	if (!pci_parent || (pci_parent != pdev->dev.parent->of_node)) {
-		of_node_put(pci_parent);
+	struct device_node *pci_parent __free(device_node) =
+			of_graph_get_remote_node(dev_of_node(ctx->dev), 0, 0);
+	if (!pci_parent || (pci_parent != pdev->dev.parent->of_node))
 		return NOTIFY_DONE;
-	}
-	of_node_put(pci_parent);
 
 	switch (action) {
 	case BUS_NOTIFY_ADD_DEVICE:
 		/* Create serdev device for WCN7850 */
 		if (pdev->vendor == PCI_VENDOR_ID_QCOM && pdev->device == 0x1107) {
-			struct device_node *serdev_parent __free(device_node) =
-				of_graph_get_remote_node(dev_of_node(ctx->dev), 1, 1);
-			if (!serdev_parent)
-				return NOTIFY_DONE;
-
-			serdev_ctrl = of_find_serdev_controller_by_node(serdev_parent);
-			if (!serdev_ctrl)
-				return NOTIFY_DONE;
-
-			ctx->serdev = serdev_device_alloc(serdev_ctrl);
-			if (!ctx->serdev)
-				return NOTIFY_BAD;
-
-			ret = pwrseq_m2_pcie_create_bt_node(ctx, serdev_parent);
-			if (ret) {
-				serdev_device_put(ctx->serdev);
+			ret = pwrseq_pcie_m2_create_serdev(ctx);
+			if (ret)
 				return notifier_from_errno(ret);
-			}
-
-			ret = serdev_device_add(ctx->serdev);
-			if (ret) {
-				dev_err(dev, "Failed to add serdev for WCN7850: %d\n", ret);
-				of_changeset_revert(ctx->ocs);
-				of_changeset_destroy(ctx->ocs);
-				serdev_device_put(ctx->serdev);
-				return notifier_from_errno(ret);
-			}
 		}
 		break;
 	case BUS_NOTIFY_REMOVED_DEVICE:
 		/* Destroy serdev device for WCN7850 */
-		if (pdev->vendor == PCI_VENDOR_ID_QCOM && pdev->device == 0x1107) {
-			serdev_device_remove(ctx->serdev);
-			of_changeset_revert(ctx->ocs);
-			of_changeset_destroy(ctx->ocs);
-		}
+		if (pdev->vendor == PCI_VENDOR_ID_QCOM && pdev->device == 0x1107)
+			pwrseq_pcie_m2_remove_serdev(ctx);
+
 		break;
 	}
 
@@ -328,17 +359,16 @@ static int pwrseq_pcie_m2_register_notifier(struct pwrseq_pcie_m2_ctx *ctx, stru
 
 	/*
 	 * Register a PCI notifier for Key E connector that has PCIe as Port
-	 * 0/Endpoint 0 interface and Serial as Port 1/Endpoint 1 interface.
+	 * 0/Endpoint 0 interface and Serial as Port 3/Endpoint 0 interface.
 	 */
-	if (pwrseq_pcie_m2_check_remote_node(dev, 1, 1, "serial")) {
+	if (pwrseq_pcie_m2_check_remote_node(dev, 3, 0, "serial")) {
 		if (pwrseq_pcie_m2_check_remote_node(dev, 0, 0, "pcie")) {
 			ctx->dev = dev;
 			ctx->nb.notifier_call = pwrseq_m2_pcie_notify;
 			ret = bus_register_notifier(&pci_bus_type, &ctx->nb);
-			if (ret) {
-				dev_err_probe(dev, ret, "Failed to register notifier for serdev\n");
-				return ret;
-			}
+			if (ret)
+				return dev_err_probe(dev, ret,
+						     "Failed to register notifier for serdev\n");
 		}
 	}
 
@@ -356,7 +386,8 @@ static int pwrseq_pcie_m2_probe(struct platform_device *pdev)
 	if (!ctx)
 		return -ENOMEM;
 
-	ctx->of_node = of_node_get(dev->of_node);
+	ctx->of_node = dev_of_node(dev);
+	platform_set_drvdata(pdev, ctx);
 	ctx->pdata = device_get_match_data(dev);
 	if (!ctx->pdata)
 		return dev_err_probe(dev, -ENODEV,
@@ -372,21 +403,21 @@ static int pwrseq_pcie_m2_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, ret,
 				     "Failed to get all regulators\n");
 
-	ctx->w_disable1_gpio = devm_gpiod_get_optional(dev, "w-disable1", GPIOD_OUT_HIGH);
-	if (IS_ERR(ctx->w_disable1_gpio))
-		return dev_err_probe(dev, PTR_ERR(ctx->w_disable1_gpio),
-				     "Failed to get the W_DISABLE_1# GPIO\n");
-
-	ctx->w_disable2_gpio = devm_gpiod_get_optional(dev, "w-disable2", GPIOD_OUT_HIGH);
-	if (IS_ERR(ctx->w_disable2_gpio))
-		return dev_err_probe(dev, PTR_ERR(ctx->w_disable2_gpio),
-				     "Failed to get the W_DISABLE_2# GPIO\n");
-
 	ctx->num_vregs = ret;
 
-	ret = devm_add_action_or_reset(dev, pwrseq_pcie_free_resources, ctx);
-	if (ret)
-		return ret;
+	ctx->w_disable1_gpio = devm_gpiod_get_optional(dev, "w-disable1", GPIOD_OUT_HIGH);
+	if (IS_ERR(ctx->w_disable1_gpio)) {
+		ret = dev_err_probe(dev, PTR_ERR(ctx->w_disable1_gpio),
+				     "Failed to get the W_DISABLE_1# GPIO\n");
+		goto err_free_regulators;
+	}
+
+	ctx->w_disable2_gpio = devm_gpiod_get_optional(dev, "w-disable2", GPIOD_OUT_HIGH);
+	if (IS_ERR(ctx->w_disable2_gpio)) {
+		ret = dev_err_probe(dev, PTR_ERR(ctx->w_disable2_gpio),
+				     "Failed to get the W_DISABLE_2# GPIO\n");
+		goto err_free_regulators;
+	}
 
 	config.parent = dev;
 	config.owner = THIS_MODULE;
@@ -395,15 +426,36 @@ static int pwrseq_pcie_m2_probe(struct platform_device *pdev)
 	config.targets = ctx->pdata->targets;
 
 	ctx->pwrseq = devm_pwrseq_device_register(dev, &config);
-	if (IS_ERR(ctx->pwrseq))
-		return dev_err_probe(dev, PTR_ERR(ctx->pwrseq),
+	if (IS_ERR(ctx->pwrseq)) {
+		ret = dev_err_probe(dev, PTR_ERR(ctx->pwrseq),
 				     "Failed to register the power sequencer\n");
+		goto err_free_regulators;
+	}
 
 	/*
 	 * Register a notifier for creating protocol devices for
 	 * non-discoverable busses like UART.
 	 */
-	return pwrseq_pcie_m2_register_notifier(ctx, dev);
+	ret = pwrseq_pcie_m2_register_notifier(ctx, dev);
+	if (ret)
+		goto err_free_regulators;
+
+	return 0;
+
+err_free_regulators:
+	regulator_bulk_free(ctx->num_vregs, ctx->regs);
+
+	return ret;
+}
+
+static void pwrseq_pcie_m2_remove(struct platform_device *pdev)
+{
+	struct pwrseq_pcie_m2_ctx *ctx = platform_get_drvdata(pdev);
+
+	bus_unregister_notifier(&pci_bus_type, &ctx->nb);
+	pwrseq_pcie_m2_remove_serdev(ctx);
+
+	regulator_bulk_free(ctx->num_vregs, ctx->regs);
 }
 
 static const struct of_device_id pwrseq_pcie_m2_of_match[] = {
@@ -425,6 +477,7 @@ static struct platform_driver pwrseq_pcie_m2_driver = {
 		.of_match_table = pwrseq_pcie_m2_of_match,
 	},
 	.probe = pwrseq_pcie_m2_probe,
+	.remove = pwrseq_pcie_m2_remove,
 };
 module_platform_driver(pwrseq_pcie_m2_driver);
 
