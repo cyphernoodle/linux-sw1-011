@@ -356,7 +356,7 @@ extern int  sched_dl_global_validate(void);
 extern void sched_dl_do_global(void);
 extern int  sched_dl_overflow(struct task_struct *p, int policy, const struct sched_attr *attr);
 extern void __setparam_dl(struct task_struct *p, const struct sched_attr *attr);
-extern void __getparam_dl(struct task_struct *p, struct sched_attr *attr);
+extern void __getparam_dl(struct task_struct *p, struct sched_attr *attr, unsigned int flags);
 extern bool __checkparam_dl(const struct sched_attr *attr);
 extern bool dl_param_changed(struct task_struct *p, const struct sched_attr *attr);
 extern int  dl_cpuset_cpumask_can_shrink(const struct cpumask *cur, const struct cpumask *trial);
@@ -684,8 +684,9 @@ struct cfs_rq {
 
 	s64			sum_w_vruntime;
 	u64			sum_weight;
-
 	u64			zero_vruntime;
+	unsigned int		sum_shift;
+
 #ifdef CONFIG_SCHED_CORE
 	unsigned int		forceidle_seq;
 	u64			zero_vruntime_fi;
@@ -782,7 +783,6 @@ enum scx_rq_flags {
 	SCX_RQ_ONLINE		= 1 << 0,
 	SCX_RQ_CAN_STOP_TICK	= 1 << 1,
 	SCX_RQ_BAL_KEEP		= 1 << 3, /* balance decided to keep current */
-	SCX_RQ_BYPASSING	= 1 << 4,
 	SCX_RQ_CLK_VALID	= 1 << 5, /* RQ clock is fresh and valid */
 	SCX_RQ_BAL_CB_PENDING	= 1 << 6, /* must queue a cb after dispatching */
 
@@ -798,8 +798,10 @@ struct scx_rq {
 	u64			extra_enq_flags;	/* see move_task_to_local_dsq() */
 	u32			nr_running;
 	u32			cpuperf_target;		/* [0, SCHED_CAPACITY_SCALE] */
+	bool			in_select_cpu;
 	bool			cpu_released;
 	u32			flags;
+	u32			nr_immed;		/* ENQ_IMMED tasks on local_dsq */
 	u64			clock;			/* current per-rq clock -- see scx_bpf_now() */
 	cpumask_var_t		cpus_to_kick;
 	cpumask_var_t		cpus_to_kick_if_idle;
@@ -808,12 +810,17 @@ struct scx_rq {
 	cpumask_var_t		cpus_to_sync;
 	bool			kick_sync_pending;
 	unsigned long		kick_sync;
-	local_t			reenq_local_deferred;
+
+	struct task_struct	*sub_dispatch_prev;
+
+	raw_spinlock_t		deferred_reenq_lock;
+	u64			deferred_reenq_locals_seq;
+	struct list_head	deferred_reenq_locals;	/* scheds requesting reenq of local DSQ */
+	struct list_head	deferred_reenq_users;	/* user DSQs requesting reenq */
 	struct balance_callback	deferred_bal_cb;
 	struct balance_callback	kick_sync_bal_cb;
 	struct irq_work		deferred_irq_work;
 	struct irq_work		kick_cpus_irq_work;
-	struct scx_dispatch_q	bypass_dsq;
 };
 #endif /* CONFIG_SCHED_CLASS_EXT */
 
@@ -1288,6 +1295,8 @@ struct rq {
 	call_single_data_t	hrtick_csd;
 	struct hrtimer		hrtick_timer;
 	ktime_t			hrtick_time;
+	ktime_t			hrtick_delay;
+	unsigned int		hrtick_sched;
 #endif
 
 #ifdef CONFIG_SCHEDSTATS
@@ -1609,13 +1618,16 @@ extern void raw_spin_rq_lock_nested(struct rq *rq, int subclass)
 extern bool raw_spin_rq_trylock(struct rq *rq)
 	__cond_acquires(true, __rq_lockp(rq));
 
-extern void raw_spin_rq_unlock(struct rq *rq)
-	__releases(__rq_lockp(rq));
-
 static inline void raw_spin_rq_lock(struct rq *rq)
 	__acquires(__rq_lockp(rq))
 {
 	raw_spin_rq_lock_nested(rq, 0);
+}
+
+static inline void raw_spin_rq_unlock(struct rq *rq)
+	__releases(__rq_lockp(rq))
+{
+	raw_spin_unlock(rq_lockp(rq));
 }
 
 static inline void raw_spin_rq_lock_irq(struct rq *rq)
@@ -1856,6 +1868,13 @@ static inline void scx_rq_clock_update(struct rq *rq, u64 clock) {}
 static inline void scx_rq_clock_invalidate(struct rq *rq) {}
 #endif /* !CONFIG_SCHED_CLASS_EXT */
 
+static inline void assert_balance_callbacks_empty(struct rq *rq)
+{
+	WARN_ON_ONCE(IS_ENABLED(CONFIG_PROVE_LOCKING) &&
+		     rq->balance_callback &&
+		     rq->balance_callback != &balance_push_callback);
+}
+
 /*
  * Lockdep annotation that avoids accidental unlocks; it's like a
  * sticky/continuous lockdep_assert_held().
@@ -1872,7 +1891,7 @@ static inline void rq_pin_lock(struct rq *rq, struct rq_flags *rf)
 
 	rq->clock_update_flags &= (RQCF_REQ_SKIP|RQCF_ACT_SKIP);
 	rf->clock_update_flags = 0;
-	WARN_ON_ONCE(rq->balance_callback && rq->balance_callback != &balance_push_callback);
+	assert_balance_callbacks_empty(rq);
 }
 
 static inline void rq_unpin_lock(struct rq *rq, struct rq_flags *rf)
@@ -2219,11 +2238,7 @@ extern int group_balance_cpu(struct sched_group *sg);
 extern void update_sched_domain_debugfs(void);
 extern void dirty_sched_domain_sysctl(int cpu);
 
-#ifdef CONFIG_SCHED_BORE
-extern void sched_update_min_base_slice(void);
-#else /* !CONFIG_SCHED_BORE */
 extern int sched_update_scaling(void);
-#endif /* CONFIG_SCHED_BORE */
 
 static inline const struct cpumask *task_user_cpus(struct task_struct *p)
 {
@@ -2856,7 +2871,7 @@ static inline void idle_set_state(struct rq *rq,
 
 static inline struct cpuidle_state *idle_get_state(struct rq *rq)
 {
-	WARN_ON_ONCE(!rcu_read_lock_held());
+	lockdep_assert(rcu_read_lock_any_held());
 
 	return rq->idle_state;
 }
@@ -2903,7 +2918,7 @@ extern void init_cfs_throttle_work(struct task_struct *p);
 #define MAX_BW_BITS		(64 - BW_SHIFT)
 #define MAX_BW			((1ULL << MAX_BW_BITS) - 1)
 
-extern unsigned long to_ratio(u64 period, u64 runtime);
+extern u64 to_ratio(u64 period, u64 runtime);
 
 extern void init_entity_runnable_average(struct sched_entity *se);
 extern void post_init_entity_util_avg(struct task_struct *p);
@@ -3008,7 +3023,30 @@ extern void deactivate_task(struct rq *rq, struct task_struct *p, int flags);
 
 extern void wakeup_preempt(struct rq *rq, struct task_struct *p, int flags);
 
-#if defined(CONFIG_PREEMPT_RT) || defined(CONFIG_CACHY)
+/*
+ * attach_task() -- attach the task detached by detach_task() to its new rq.
+ */
+static inline void attach_task(struct rq *rq, struct task_struct *p)
+{
+	lockdep_assert_rq_held(rq);
+
+	WARN_ON_ONCE(task_rq(p) != rq);
+	activate_task(rq, p, ENQUEUE_NOCLOCK);
+	wakeup_preempt(rq, p, 0);
+}
+
+/*
+ * attach_one_task() -- attaches the task returned from detach_one_task() to
+ * its new rq.
+ */
+static inline void attach_one_task(struct rq *rq, struct task_struct *p)
+{
+	guard(rq_lock)(rq);
+	update_rq_clock(rq);
+	attach_task(rq, p);
+}
+
+#ifdef CONFIG_PREEMPT_RT
 # define SCHED_NR_MIGRATE_BREAK 8
 #else
 # define SCHED_NR_MIGRATE_BREAK 32
@@ -3017,12 +3055,7 @@ extern void wakeup_preempt(struct rq *rq, struct task_struct *p, int flags);
 extern __read_mostly unsigned int sysctl_sched_nr_migrate;
 extern __read_mostly unsigned int sysctl_sched_migration_cost;
 
-#ifdef CONFIG_SCHED_BORE
-extern unsigned int sysctl_sched_min_base_slice;
-extern __read_mostly uint sysctl_sched_base_slice;
-#else /* !CONFIG_SCHED_BORE */
 extern unsigned int sysctl_sched_base_slice;
-#endif /* CONFIG_SCHED_BORE */
 
 extern int sysctl_resched_latency_warn_ms;
 extern int sysctl_resched_latency_warn_once;
@@ -3042,46 +3075,31 @@ extern unsigned int sysctl_numa_balancing_hot_threshold;
  *  - enabled by features
  *  - hrtimer is actually high res
  */
-static inline int hrtick_enabled(struct rq *rq)
+static inline bool hrtick_enabled(struct rq *rq)
 {
-	if (!cpu_active(cpu_of(rq)))
-		return 0;
-	return hrtimer_is_hres_active(&rq->hrtick_timer);
+	return cpu_active(cpu_of(rq)) && hrtimer_highres_enabled();
 }
 
-static inline int hrtick_enabled_fair(struct rq *rq)
+static inline bool hrtick_enabled_fair(struct rq *rq)
 {
-	if (!sched_feat(HRTICK))
-		return 0;
-	return hrtick_enabled(rq);
+	return sched_feat(HRTICK) && hrtick_enabled(rq);
 }
 
-static inline int hrtick_enabled_dl(struct rq *rq)
+static inline bool hrtick_enabled_dl(struct rq *rq)
 {
-	if (!sched_feat(HRTICK_DL))
-		return 0;
-	return hrtick_enabled(rq);
+	return sched_feat(HRTICK_DL) && hrtick_enabled(rq);
 }
 
 extern void hrtick_start(struct rq *rq, u64 delay);
+static inline bool hrtick_active(struct rq *rq)
+{
+	return hrtimer_active(&rq->hrtick_timer);
+}
 
 #else /* !CONFIG_SCHED_HRTICK: */
-
-static inline int hrtick_enabled_fair(struct rq *rq)
-{
-	return 0;
-}
-
-static inline int hrtick_enabled_dl(struct rq *rq)
-{
-	return 0;
-}
-
-static inline int hrtick_enabled(struct rq *rq)
-{
-	return 0;
-}
-
+static inline bool hrtick_enabled_fair(struct rq *rq) { return false; }
+static inline bool hrtick_enabled_dl(struct rq *rq) { return false; }
+static inline bool hrtick_enabled(struct rq *rq) { return false; }
 #endif /* !CONFIG_SCHED_HRTICK */
 
 #ifndef arch_scale_freq_tick
@@ -3375,104 +3393,6 @@ static inline void nohz_balance_exit_idle(struct rq *rq) { }
 extern void nohz_run_idle_balance(int cpu);
 #else
 static inline void nohz_run_idle_balance(int cpu) { }
-#endif
-
-#ifdef CONFIG_SCHED_POC_SELECTOR
-extern struct static_key_true sched_poc_enabled;
-extern struct static_key_true sched_poc_aligned;
-extern void __set_cpu_idle_state_poc(int cpu, int state);
-static __always_inline void set_cpu_idle_state_poc(int cpu, int state)
-{
-	if (static_branch_likely(&sched_poc_enabled) &&
-	    !sched_asym_cpucap_active())
-		__set_cpu_idle_state_poc(cpu, state);
-}
-
-/*
- * POC_CTZ64 - Count trailing zeros (find first set bit)
- *
- * Architecture-optimized CTZ for POC idle CPU selection.
- * Returns 64 for input 0 (important for BSF-based implementations).
- */
-#if defined(__x86_64__) && defined(__BMI__)
-/* Tier 1: x86-64 with BMI1 - TZCNT is zero-safe */
-#define POC_CTZ64(v) ((int)__builtin_ctzll(v))
-
-#elif defined(__aarch64__)
-/* Tier 1: ARM64 - RBIT+CLZ is zero-safe */
-#define POC_CTZ64(v) ((int)__builtin_ctzll(v))
-
-#elif defined(__riscv) && defined(__riscv_zbb)
-/* Tier 1: RISC-V with Zbb - CTZ is zero-safe */
-#define POC_CTZ64(v) ((int)__builtin_ctzll(v))
-
-#elif defined(__x86_64__)
-/* Tier 2: x86-64 without BMI1 - BSF needs zero check */
-static __always_inline int poc_ctz64_bsf(u64 v)
-{
-	if (unlikely(!v))
-		return 64;
-	return (int)__builtin_ctzll(v);
-}
-#define POC_CTZ64(v) poc_ctz64_bsf(v)
-
-#else
-/* Tier 3: De Bruijn fallback for other architectures */
-#define POC_DEBRUIJN_CTZ64_CONST 0x03F79D71B4CA8B09ULL
-static const u8 poc_debruijn_ctz64_tab[64] = {
-	 0,  1, 56,  2, 57, 49, 28,  3,
-	61, 58, 42, 50, 38, 29, 17,  4,
-	62, 47, 59, 36, 45, 43, 51, 22,
-	53, 39, 33, 30, 24, 18, 12,  5,
-	63, 55, 48, 27, 60, 41, 37, 16,
-	46, 35, 44, 21, 52, 32, 23, 11,
-	54, 26, 40, 15, 34, 20, 31, 10,
-	25, 14, 19,  9, 13,  8,  7,  6,
-};
-static __always_inline int poc_debruijn_ctz64(u64 v)
-{
-	u64 lsb;
-	u32 idx;
-
-	if (unlikely(!v))
-		return 64;
-	lsb = v & (-(s64)v);
-	idx = (u32)((lsb * POC_DEBRUIJN_CTZ64_CONST) >> 58);
-	return (int)poc_debruijn_ctz64_tab[idx & 63];
-}
-#define POC_CTZ64(v) poc_debruijn_ctz64(v)
-
-#endif /* POC_CTZ64 */
-
-/*
- * POC helper: convert cpumask region to POC-relative u64
- *
- * Extracts the 64-bit region of @mask corresponding to this LLC's
- * CPU range and shifts it to align with POC's bit positions.
- *
- * Used by load balancer functions that need to intersect cpumasks
- * with POC idle bitmaps.
- */
-static __always_inline u64 poc_cpumask_to_u64(const struct cpumask *mask,
-					      struct sched_domain_shared *sd_share)
-{
-	int base = sd_share->poc_cpu_base;
-	int base_word = base >> 6;
-
-	if (static_branch_likely(&sched_poc_aligned)) {
-		/* Fast path: no shift needed (base is 64-aligned) */
-		return cpumask_bits(mask)[base_word];
-	} else {
-		/* Slow path: shift required (e.g., Threadripper) */
-		int shift = sd_share->poc_affinity_shift;
-		u64 lo = cpumask_bits(mask)[base_word];
-		u64 hi = cpumask_bits(mask)[base_word + 1];
-		return (lo >> shift) | (hi << (64 - shift));
-	}
-}
-
-#else
-static inline void set_cpu_idle_state_poc(int cpu, int state) { }
 #endif
 
 #include "stats.h"
