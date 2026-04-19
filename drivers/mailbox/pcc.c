@@ -505,7 +505,6 @@ static const struct mbox_chan_ops pcc_chan_ops = {
 	.send_data = pcc_send_data,
 	.startup = pcc_startup,
 	.shutdown = pcc_shutdown,
-	.last_tx_done = pcc_last_tx_done,
 };
 
 /**
