@@ -100,7 +100,6 @@ static void quirk_no_vlv_disp_pw_dpio_cmn_bc_init(struct intel_display *display)
 	intel_set_quirk(display, QUIRK_NO_VLV_DISP_PW_DPIO_CMN_BC_INIT);
 	drm_info(display->drm, "Applying no dpio-common-bc powerwell init quirk\n");
 }
-}
 
 struct intel_quirk {
 	int device;
