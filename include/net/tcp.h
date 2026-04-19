@@ -1295,10 +1295,11 @@ enum tcp_ca_ack_event_flags {
 #define TCP_CONG_ECT_1_NEGOTIATION	BIT(3)
 /* Cannot fallback to RFC3168 during AccECN negotiation */
 #define TCP_CONG_NO_FALLBACK_RFC3168	BIT(4)
+/* Congestion control wants to receive CE events even if not using AccECN */
+#define TCP_CONG_WANTS_CE_EVENTS	BIT(5)
 #define TCP_CONG_MASK  (TCP_CONG_NON_RESTRICTED | TCP_CONG_NEEDS_ECN | \
 			TCP_CONG_NEEDS_ACCECN | TCP_CONG_ECT_1_NEGOTIATION | \
-			TCP_CONG_NO_FALLBACK_RFC3168)
-
+			TCP_CONG_NO_FALLBACK_RFC3168 | TCP_CONG_WANTS_CE_EVENTS)
 union tcp_cc_info;
 
 struct ack_sample {
