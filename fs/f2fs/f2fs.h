@@ -1838,15 +1838,6 @@ struct f2fs_sb_info {
 	unsigned int nat_journal_entries;	/* nat journal entry count in the journal */
 	unsigned int sit_journal_entries;	/* sit journal entry count in the journal */
 
-	/* variable summary block units */
-	unsigned int sum_blocksize;		/* sum block size */
-	unsigned int sums_per_block;		/* sum block count per block */
-	unsigned int entries_in_sum;		/* entry count in sum block */
-	unsigned int sum_entry_size;		/* total entry size in sum block */
-	unsigned int sum_journal_size;		/* journal size in sum block */
-	unsigned int nat_journal_entries;	/* nat journal entry count in the journal */
-	unsigned int sit_journal_entries;	/* sit journal entry count in the journal */
-
 	block_t user_block_count;		/* # of user blocks */
 	block_t total_valid_block_count;	/* # of valid blocks */
 	block_t discard_blks;			/* discard command candidats */

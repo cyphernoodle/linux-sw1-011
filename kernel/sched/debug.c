@@ -171,6 +171,9 @@ static const struct file_operations sched_feat_fops = {
 };
 
 #ifdef CONFIG_SCHED_BORE
+static unsigned int sysctl_sched_min_base_slice = 0;
+static void sched_update_min_base_slice(void) { }
+
 #define DEFINE_SYSCTL_SCHED_FUNC(name, update_func) \
 static ssize_t sched_##name##_write(struct file *filp, const char __user *ubuf, size_t cnt, loff_t *ppos) \
 { \
