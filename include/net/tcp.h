@@ -1381,6 +1381,8 @@ struct tcp_congestion_ops {
 
 	/* override sysctl_tcp_min_tso_segs (optional) */
 	u32 (*min_tso_segs)(struct sock *sk);
+	/* return number of TSO segments to use (optional) */
+	u32 (*tso_segs)(struct sock *sk, unsigned int mss_now);
 
 	/* new value of cwnd after loss (required) */
 	u32  (*undo_cwnd)(struct sock *sk);

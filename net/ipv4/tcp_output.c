@@ -67,6 +67,9 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 			   int push_one, gfp_t gfp);
 
 /* Insert skb into rb tree, ordered by TCP_SKB_CB(skb)->seq */
+static void tcp_rate_skb_sent(struct sock *sk, struct sk_buff *skb);
+static void tcp_set_tx_in_flight(struct sock *sk, struct sk_buff *skb);
+
 void tcp_rbtree_insert(struct rb_root *root, struct sk_buff *skb)
 {
 	struct rb_node **p = &root->rb_node;
@@ -107,6 +110,8 @@ static void tcp_event_new_data_sent(struct sock *sk, struct sk_buff *skb)
 	NET_ADD_STATS(sock_net(sk), LINUX_MIB_TCPORIGDATASENT,
 		      tcp_skb_pcount(skb));
 	tcp_check_space(sk);
+	tcp_rate_skb_sent(sk, skb);
+	tcp_set_tx_in_flight(sk, skb);
 }
 
 /* SND.NXT, if window was not shrunk or the amount of shrunk was less than one
@@ -1496,6 +1501,14 @@ static void tcp_rate_skb_sent(struct sock *sk, struct sk_buff *skb)
 	TCP_SKB_CB(skb)->tx.is_app_limited	= tp->app_limited ? 1 : 0;
 }
 
+static void tcp_set_tx_in_flight(struct sock *sk, struct sk_buff *skb)
+{
+	struct tcp_sock *tp = tcp_sk(sk);
+
+	TCP_SKB_CB(skb)->tx.in_flight = tcp_packets_in_flight(tp);
+	TCP_SKB_CB(skb)->tx.lost = tp->lost_out;
+}
+
 INDIRECT_CALLABLE_DECLARE(int ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl));
 INDIRECT_CALLABLE_DECLARE(int inet6_csk_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl));
 
@@ -1722,6 +1735,7 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	if (!err && oskb) {
 		tcp_update_skb_after_send(sk, oskb, prior_wstamp);
 		tcp_rate_skb_sent(sk, oskb);
+		tcp_set_tx_in_flight(sk, oskb);
 	}
 	return err;
 }
@@ -3028,6 +3042,7 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 			skb_set_delivery_time(skb, tp->tcp_wstamp_ns, SKB_CLOCK_MONOTONIC);
 			list_move_tail(&skb->tcp_tsorted_anchor, &tp->tsorted_sent_queue);
 			tcp_init_tso_segs(skb, mss_now);
+			tcp_rate_skb_sent(sk, skb);
 			tcp_set_tx_in_flight(sk, skb);
 			goto repair; /* Skip network transmission */
 		}
@@ -3700,6 +3715,7 @@ start:
 		if (!err) {
 			tcp_update_skb_after_send(sk, skb, tp->tcp_wstamp_ns);
 			tcp_rate_skb_sent(sk, skb);
+			tcp_set_tx_in_flight(sk, skb);
 		}
 	} else {
 		err = tcp_transmit_skb(sk, skb, 1, GFP_ATOMIC);
