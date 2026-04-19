@@ -2995,13 +2995,6 @@ static void tcp_grow_skb(struct sock *sk, struct sk_buff *skb, int amount)
  * Returns true, if no segments are in flight and we have queued segments,
  * but cannot send anything now because of SWS or another problem.
  */
-static void tcp_set_tx_in_flight(struct sock *sk, struct sk_buff *skb)
-{
-	struct tcp_sock *tp = tcp_sk(sk);
-
-	TCP_SKB_CB(skb)->tx.in_flight = tcp_packets_in_flight(tp);
-	TCP_SKB_CB(skb)->tx.lost = tp->lost_out;
-}
 
 static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 			   int push_one, gfp_t gfp)
