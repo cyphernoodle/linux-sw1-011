@@ -524,7 +524,7 @@ static void rfx_update_single_perf(struct update_util_data *hook, u64 time,
 	if (rfx_hold_freq(rfx_c) && rfx_c->util < prev_util)
 		rfx_c->util = prev_util;
 
-	cpufreq_driver_adjust_perf(rfx_c->cpu, rfx_c->bw_min,
+	cpufreq_driver_adjust_perf(rfx_pol->policy, rfx_c->bw_min,
 				   rfx_c->util, max_cap);
 
 	rfx_pol->last_freq_update_time = time;
