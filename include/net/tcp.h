@@ -1395,6 +1395,7 @@ struct tcp_congestion_ops {
 	char 			name[TCP_CA_NAME_MAX];
 	struct module		*owner;
 	struct list_head	list;
+	void (*skb_marked_lost)(struct sock *sk, const struct sk_buff *skb);
 	u32			key;
 	u32			flags;
 

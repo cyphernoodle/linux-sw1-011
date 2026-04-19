@@ -16,6 +16,7 @@
 #include "intel_display_types.h"
 #include "intel_display_utils.h"
 #include "intel_vblank.h"
+#include "i915_drv.h"
 #include "intel_vrr.h"
 
 /*
