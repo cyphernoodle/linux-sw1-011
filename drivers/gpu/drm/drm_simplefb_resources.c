@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-only */
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Helper code for acquiring and releasing resources (clks, regulators, etc.)
  * for devices with a firmware node following the simple-framebuffer compatible
@@ -37,15 +37,11 @@
  */
 static int simplefb_init_clocks(struct device *dev, struct simplefb_resources *res)
 {
-	struct device_node *of_node = dev->of_node;
 	struct clk *clock;
 	unsigned int i;
 	int ret;
 
-	if (!of_node)
-		return 0;
-
-	res->clk_count = of_clk_get_parent_count(of_node);
+	res->clk_count = of_clk_get_parent_count(dev->of_node);
 	if (!res->clk_count)
 		return 0;
 
@@ -54,7 +50,7 @@ static int simplefb_init_clocks(struct device *dev, struct simplefb_resources *r
 		return -ENOMEM;
 
 	for (i = 0; i < res->clk_count; ++i) {
-		clock = of_clk_get(of_node, i);
+		clock = of_clk_get(dev->of_node, i);
 		if (IS_ERR(clock)) {
 			ret = dev_err_probe(dev, PTR_ERR(clock), "getting clock %u\n", i);
 			if (ret == -EPROBE_DEFER)
@@ -129,18 +125,14 @@ static void simplefb_release_clocks(struct simplefb_resources *res) { }
  */
 static int simplefb_init_regulators(struct device *dev, struct simplefb_resources *res)
 {
-	struct device_node *of_node = dev->of_node;
 	unsigned int count = 0, i = 0;
 	struct regulator *regulator;
 	struct property *prop;
 	const char *p;
 	int ret;
 
-	if (!of_node)
-		return 0;
-
 	/* Count the number of regulator supplies */
-	for_each_property_of_node(of_node, prop) {
+	for_each_property_of_node(dev->of_node, prop) {
 		p = strstr(prop->name, SUPPLY_SUFFIX);
 		if (p && p != prop->name)
 			++count;
@@ -153,7 +145,7 @@ static int simplefb_init_regulators(struct device *dev, struct simplefb_resource
 	if (!res->regulators)
 		return -ENOMEM;
 
-	for_each_property_of_node(of_node, prop) {
+	for_each_property_of_node(dev->of_node, prop) {
 		char name[32]; /* 32 is max size of property name */
 		size_t len;
 
@@ -199,7 +191,6 @@ err:
 
 static void simplefb_release_regulators(struct simplefb_resources *res)
 {
-	struct simplefb *sdev = res;
 	unsigned int i;
 
 	for (i = 0; i < res->regulator_count; ++i) {
@@ -243,7 +234,6 @@ static void simplefb_release_regulators(struct simplefb_resources *res) { }
 static void simplefb_detach_genpd(struct simplefb_resources *res)
 {
 	int i;
-	struct simplefb *sdev = res;
 
 	if (res->pwr_dom_count <= 1)
 		return;
@@ -254,15 +244,16 @@ static void simplefb_detach_genpd(struct simplefb_resources *res)
 		if (!IS_ERR_OR_NULL(res->pwr_dom_devs[i]))
 			dev_pm_domain_detach(res->pwr_dom_devs[i], true);
 	}
+	kfree(res->pwr_dom_links);
+	kfree(res->pwr_dom_devs);
 }
 
 static int simplefb_attach_genpd(struct device *dev, struct simplefb_resources *res)
 {
-	struct device *dev = res->sysfb.dev.dev;
-	int i;
+	int i, ret;
 
 	res->pwr_dom_count = of_count_phandle_with_args(dev->of_node, "power-domains",
-							 "#power-domain-cells");
+							"#power-domain-cells");
 	/*
 	 * Single power-domain devices are handled by driver core nothing to do
 	 * here. The same for device nodes without "power-domains" property.
@@ -270,8 +261,8 @@ static int simplefb_attach_genpd(struct device *dev, struct simplefb_resources *
 	if (res->pwr_dom_count <= 1)
 		return 0;
 
-	res->pwr_dom_devs = kzalloc_objs(struct device *, count);
-	res->pwr_dom_links = kzalloc_objs(struct device_link *, count);
+	res->pwr_dom_devs = kzalloc_objs(struct device *, res->pwr_dom_count);
+	res->pwr_dom_links = kzalloc_objs(struct device_link *, res->pwr_dom_count);
 	if (!res->pwr_dom_devs || !res->pwr_dom_links) {
 		kfree(res->pwr_dom_links);
 		kfree(res->pwr_dom_devs);
@@ -281,7 +272,7 @@ static int simplefb_attach_genpd(struct device *dev, struct simplefb_resources *
 	for (i = 0; i < res->pwr_dom_count; i++) {
 		res->pwr_dom_devs[i] = dev_pm_domain_attach_by_id(dev, i);
 		if (IS_ERR(res->pwr_dom_devs[i])) {
-			ret = dev_err_probe(dev, PTR_ERR(res->pwr_dom_devs[i],
+			ret = dev_err_probe(dev, PTR_ERR(res->pwr_dom_devs[i]),
 					    "attaching PM domain %d\n", i);
 			if (ret == -EPROBE_DEFER) {
 				simplefb_detach_genpd(res);
@@ -312,6 +303,9 @@ static void simplefb_detach_genpd(struct simplefb_resources *res) { }
 int simplefb_acquire_resources(struct device *dev, struct simplefb_resources *res)
 {
 	int ret;
+
+	if (!dev->of_node)
+		return 0;
 
 	ret = simplefb_init_clocks(dev, res);
 	if (ret)

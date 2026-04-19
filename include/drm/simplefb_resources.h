@@ -35,13 +35,9 @@ struct simplefb_resources {
 	struct device **pwr_dom_devs;
 	struct device_link **pwr_dom_links;
 #endif
-#if !defined CONFIG_OF || \
-    !(defined CONFIG_COMMON_CLK || defined CONFIG_REGULATOR || defined CONFIG_PM_GENERIC_DOMAINS)
-    	int dummy; /* Avoid empty struct compiler warnings */
-#endif
 };
 
 int simplefb_acquire_resources(struct device *dev, struct simplefb_resources *res);
-void simplefb_release_resources(struct device *dev);
+void simplefb_release_resources(struct simplefb_resources *res);
 
 #endif
