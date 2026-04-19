@@ -4135,7 +4135,7 @@ DEFINE_CLASS(sched_change, struct sched_change_ctx *,
 DEFINE_CLASS_IS_UNCONDITIONAL(sched_change)
 
 #ifdef CONFIG_SCHED_POC_SELECTOR
-extern struct static_key sched_poc_enabled;
+extern struct static_key_true sched_poc_enabled;
 extern void __set_cpu_idle_state_poc(int cpu, int state);
 static inline void set_cpu_idle_state_poc(int cpu, int state)
 {
