@@ -845,8 +845,9 @@ struct bore_ctx {
 	bool			futex_waiting;
 	struct bore_bc	subtree;
 	struct bore_bc	group;
-} ____cacheline_aligned;
+};
 #endif /* CONFIG_SCHED_BORE */
+
 
 struct task_struct {
 #ifdef CONFIG_THREAD_INFO_IN_TASK

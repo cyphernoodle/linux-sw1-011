@@ -8,6 +8,10 @@
 #include <linux/sched/bore.h>
 #endif /* CONFIG_SCHED_BORE */
 
+#ifdef CONFIG_SCHED_BORE
+#include <linux/sched/bore.h>
+#endif /* CONFIG_SCHED_BORE */
+
 #include "futex.h"
 
 /*

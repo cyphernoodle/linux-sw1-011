@@ -6,13 +6,15 @@
 #include <linux/atomic.h>
 #include <linux/list.h>
 #include <linux/rcupdate.h>
+#include <linux/jump_label.h>
 
 #define SCHED_BORE_AUTHOR   "Masahito Suzuki"
 #define SCHED_BORE_PROGNAME "BORE CPU Scheduler modification"
 
-#define SCHED_BORE_VERSION  "6.6.1"
+#define SCHED_BORE_VERSION  "6.6.3"
 
 extern u8   __read_mostly sched_bore;
+DECLARE_STATIC_KEY_TRUE(sched_bore_key);
 extern u8   __read_mostly sched_burst_inherit_type;
 extern u8   __read_mostly sched_burst_smoothness;
 extern u8   __read_mostly sched_burst_penalty_offset;
