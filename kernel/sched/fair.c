@@ -58,6 +58,10 @@
 #include "stats.h"
 #include "autogroup.h"
 
+#ifdef CONFIG_SCHED_BORE
+#include <linux/sched/bore.h>
+#endif /* CONFIG_SCHED_BORE */
+
 /*
  * The initial- and re-scaling of tunables is configurable
  *
@@ -67,17 +71,30 @@
  *   SCHED_TUNABLESCALING_LOG - scaled logarithmically, *1+ilog(ncpus)
  *   SCHED_TUNABLESCALING_LINEAR - scaled linear, *ncpus
  *
- * (default SCHED_TUNABLESCALING_LOG = *(1+ilog(ncpus))
+ * BORE : default SCHED_TUNABLESCALING_NONE = *1 constant
+ * EEVDF: default SCHED_TUNABLESCALING_LOG  = *(1+ilog(ncpus))
  */
+#ifdef CONFIG_SCHED_BORE
+unsigned int sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_NONE;
+#else /* !CONFIG_SCHED_BORE */
 unsigned int sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_LOG;
+#endif /* CONFIG_SCHED_BORE */
 
 /*
  * Minimal preemption granularity for CPU-bound tasks:
  *
- * (default: 0.70 msec * (1 + ilog(ncpus)), units: nanoseconds)
+ * BORE : base_slice = minimum multiple of nsecs_per_tick >= min_base_slice
+ * (default min_base_slice = 2000000 constant, units: nanoseconds)
+ * EEVDF: default 0.70 msec * (1 + ilog(ncpus)), units: nanoseconds
  */
+#ifdef CONFIG_SCHED_BORE
+static const unsigned int nsecs_per_tick       = 1000000000ULL / HZ;
+unsigned int sysctl_sched_min_base_slice       = CONFIG_MIN_BASE_SLICE_NS;
+__read_mostly uint sysctl_sched_base_slice     = nsecs_per_tick;
+#else /* !CONFIG_SCHED_BORE */
 unsigned int sysctl_sched_base_slice			= 700000ULL;
 static unsigned int normalized_sysctl_sched_base_slice	= 700000ULL;
+#endif /* CONFIG_SCHED_BORE */
 
 __read_mostly unsigned int sysctl_sched_migration_cost	= 500000UL;
 
@@ -189,6 +206,13 @@ static inline void update_load_set(struct load_weight *lw, unsigned long w)
  *
  * This idea comes from the SD scheduler of Con Kolivas:
  */
+#ifdef CONFIG_SCHED_BORE
+static void update_sysctl(void) {
+	sysctl_sched_base_slice = nsecs_per_tick *
+		max(1UL, DIV_ROUND_UP(sysctl_sched_min_base_slice, nsecs_per_tick));
+}
+void sched_update_min_base_slice(void) { update_sysctl(); }
+#else /* !CONFIG_SCHED_BORE */
 static unsigned int get_update_sysctl_factor(void)
 {
 	unsigned int cpus = min_t(unsigned int, num_online_cpus(), 8);
@@ -219,6 +243,7 @@ static void update_sysctl(void)
 	SET_SYSCTL(sched_base_slice);
 #undef SET_SYSCTL
 }
+#endif /* CONFIG_SCHED_BORE */
 
 void __init sched_init_granularity(void)
 {
@@ -1049,7 +1074,11 @@ struct sched_entity *__pick_first_entity(struct cfs_rq *cfs_rq)
  */
 static inline void set_protect_slice(struct cfs_rq *cfs_rq, struct sched_entity *se)
 {
+#ifdef CONFIG_SCHED_BORE
+	u64 slice = sysctl_sched_base_slice;
+#else /* CONFIG_SCHED_BORE */
 	u64 slice = normalized_sysctl_sched_base_slice;
+#endif /* CONFIG_SCHED_BORE */
 	u64 vprot = se->deadline;
 
 	if (sched_feat(RUN_TO_PARITY))
@@ -1127,6 +1156,11 @@ static struct sched_entity *__pick_eevdf(struct cfs_rq *cfs_rq, bool protect)
 		curr = NULL;
 
 	if (curr && protect && protect_slice(curr))
+#ifdef CONFIG_SCHED_BORE
+		if (!static_branch_likely(&sched_bore_key) ||
+			!entity_is_task(curr) ||
+			!task_of(curr)->bore.futex_waiting)
+#endif /* CONFIG_SCHED_BORE */
 		return curr;
 
 	/* Pick the leftmost entity if it's eligible */
@@ -1188,6 +1222,7 @@ struct sched_entity *__pick_last_entity(struct cfs_rq *cfs_rq)
 /**************************************************************
  * Scheduling class statistics methods:
  */
+#if !defined(CONFIG_SCHED_BORE)
 int sched_update_scaling(void)
 {
 	unsigned int factor = get_update_sysctl_factor();
@@ -1199,6 +1234,7 @@ int sched_update_scaling(void)
 
 	return 0;
 }
+#endif /* CONFIG_SCHED_BORE */
 
 static void clear_buddies(struct cfs_rq *cfs_rq, struct sched_entity *se);
 
@@ -1233,7 +1269,7 @@ static bool update_deadline(struct cfs_rq *cfs_rq, struct sched_entity *se)
 
 #include "pelt.h"
 
-static int select_idle_sibling(struct task_struct *p, int prev_cpu, int cpu);
+static int select_idle_sibling(struct task_struct *p, int prev_cpu, int cpu, int sync);
 static unsigned long task_h_load(struct task_struct *p);
 static unsigned long capacity_of(int cpu);
 
@@ -1399,6 +1435,7 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	resched = update_deadline(cfs_rq, curr);
 
 	if (entity_is_task(curr)) {
+
 		/*
 		 * If the fair_server is active, we need to account for the
 		 * fair_server time whether or not the task is running on
@@ -1411,6 +1448,13 @@ static void update_curr(struct cfs_rq *cfs_rq)
 		 */
 		dl_server_update(&rq->fair_server, delta_exec);
 	}
+
+#ifdef CONFIG_SCHED_BORE
+	if (entity_is_task(curr))
+		update_curr_bore(task_of(curr), delta_exec);
+#endif
+
+
 
 	account_cfs_rq_runtime(cfs_rq, delta_exec);
 
@@ -5469,7 +5513,18 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		se->rel_deadline = 0;
 		return;
 	}
-
+#ifdef CONFIG_SCHED_BORE
+	if (static_branch_likely(&sched_bore_key) &&
+			entity_is_task(se) &&
+			task_of(se)->bore.futex_waiting)
+		goto vslice_found;
+#endif /* !CONFIG_SCHED_BORE */
+	vslice = calc_delta_fair(se->slice, se);
+#ifdef CONFIG_SCHED_BORE
+	if (static_branch_likely(&sched_bore_key))
+		vslice >>= !!(flags & (ENQUEUE_INITIAL | ENQUEUE_WAKEUP));
+	else
+#endif /* CONFIG_SCHED_BORE */
 	/*
 	 * When joining the competition; the existing tasks will be,
 	 * on average, halfway through their slice, as such start tasks
@@ -5478,6 +5533,9 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	if (sched_feat(PLACE_DEADLINE_INITIAL) && (flags & ENQUEUE_INITIAL))
 		vslice /= 2;
 
+#ifdef CONFIG_SCHED_BORE
+vslice_found:
+#endif /* CONFIG_SCHED_BORE */
 	/*
 	 * EEVDF: vd_i = ve_i + r_i/w_i
 	 */
@@ -5488,7 +5546,7 @@ static void check_enqueue_throttle(struct cfs_rq *cfs_rq);
 static inline int cfs_rq_throttled(struct cfs_rq *cfs_rq);
 
 static void
-requeue_delayed_entity(struct sched_entity *se);
+requeue_delayed_entity(struct sched_entity *se, int flags);
 
 static void
 enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
@@ -7133,7 +7191,7 @@ static int choose_idle_cpu(int cpu, struct task_struct *p)
 }
 
 static void
-requeue_delayed_entity(struct sched_entity *se)
+requeue_delayed_entity(struct sched_entity *se, int flags)
 {
 	struct cfs_rq *cfs_rq = cfs_rq_of(se);
 
@@ -7188,7 +7246,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		util_est_enqueue(&rq->cfs, p);
 
 	if (flags & ENQUEUE_DELAYED) {
-		requeue_delayed_entity(se);
+		requeue_delayed_entity(se, flags);
 		return;
 	}
 
@@ -7206,7 +7264,7 @@ enqueue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	for_each_sched_entity(se) {
 		if (se->on_rq) {
 			if (se->sched_delayed)
-				requeue_delayed_entity(se);
+				requeue_delayed_entity(se, flags);
 			break;
 		}
 		cfs_rq = cfs_rq_of(se);
@@ -7410,6 +7468,15 @@ static bool dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		util_est_dequeue(&rq->cfs, p);
 
 	util_est_update(&rq->cfs, p, flags & DEQUEUE_SLEEP);
+#ifdef CONFIG_SCHED_BORE
+	struct cfs_rq *cfs_rq = cfs_rq_of(&p->se);
+	struct sched_entity *se = &p->se;
+	if ((flags & DEQUEUE_SLEEP) && entity_is_task(se)) {
+		if (cfs_rq->curr == se)
+			update_curr(cfs_rq);
+		restart_burst_bore(p);
+	}
+#endif /* CONFIG_SCHED_BORE */
 	if (dequeue_entities(rq, &p->se, flags) < 0)
 		return false;
 
@@ -7836,6 +7903,20 @@ unlock:
 }
 
 /*
+ * Check if the entire core (all SMT siblings) containing @cpu is idle.
+ */
+static inline bool is_idle_core(int cpu)
+{
+	int sibling;
+
+	for_each_cpu(sibling, cpu_smt_mask(cpu)) {
+		if (!available_idle_cpu(sibling))
+			return false;
+	}
+	return true;
+}
+
+/*
  * Scan the entire LLC domain for idle cores; this dynamically switches off if
  * there are no idle cores left in the system; tracked through
  * sd_llc->shared->has_idle_cores and enabled through update_idle_core() above.
@@ -7901,6 +7982,11 @@ static inline void set_idle_cores(int cpu, int val)
 static inline bool test_idle_cores(int cpu)
 {
 	return false;
+}
+
+static inline bool is_idle_core(int cpu)
+{
+	return available_idle_cpu(cpu);
 }
 
 static inline int select_idle_core(struct task_struct *p, int core, struct cpumask *cpus, int *idle_cpu)
@@ -8057,15 +8143,37 @@ static inline bool asym_fits_cpu(unsigned long util,
 	return true;
 }
 
+#ifdef CONFIG_SCHED_POC_SELECTOR
+#include "poc_selector.c"
+#endif
 /*
  * Try and locate an idle core/thread in the LLC cache domain.
  */
-static int select_idle_sibling(struct task_struct *p, int prev, int target)
+static int select_idle_sibling(struct task_struct *p, int prev, int target, int sync)
 {
 	bool has_idle_core = false;
 	struct sched_domain *sd;
 	unsigned long task_util, util_min, util_max;
 	int i, recent_used_cpu, prev_aff = -1;
+
+	/* Check a recently used CPU as a potential idle candidate: */
+	recent_used_cpu = p->recent_used_cpu;
+	p->recent_used_cpu = prev;
+	if (recent_used_cpu != prev &&
+	    recent_used_cpu != target &&
+	    cpus_share_cache(recent_used_cpu, target) &&
+	    (available_idle_cpu(recent_used_cpu) || sched_idle_cpu(recent_used_cpu)) &&
+	    cpumask_test_cpu(recent_used_cpu, p->cpus_ptr)) {
+#ifdef CONFIG_SCHED_POC_SELECTOR
+		if (!static_branch_likely(&poc_selector_active) ||
+			static_branch_unlikely(&sched_poc_early_select))
+#endif
+		if ((unsigned int)recent_used_cpu < nr_cpumask_bits &&
+		    is_idle_core(recent_used_cpu))
+			return recent_used_cpu;
+	} else {
+		recent_used_cpu = -1;
+	}
 
 	/*
 	 * On asymmetric system, update task utilization because we will check
@@ -8159,6 +8267,74 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 	if (!sd)
 		return target;
 
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	{
+		struct sched_domain_shared *sd_share =
+			rcu_dereference(per_cpu(sd_llc_shared, target));
+		if (static_branch_likely(&poc_selector_active)
+				&& !sched_asym_cpucap_active()
+				&& sd_share && likely(sd_share->poc_fast_eligible)) {
+			int poc_cpu = select_idle_cpu_poc(target, prev,
+					recent_used_cpu, sync,
+					sd_share, p->cpus_ptr);
+			if (poc_cpu >= 0) {
+				return poc_cpu;
+			}
+			/*
+			 * POC returns -2 when the SIS_UTIL overload gate fires
+			 * (smt_fallback=0 only). POC has already checked
+			 * prev's SMT sibling (Level 4) and decided broader
+			 * search is not worthwhile. CFS would reach the same
+			 * conclusion, so skip select_idle_smt/select_idle_cpu.
+			 *
+			 * POC returns -1 for Level 0 saturation (no idle CPUs
+			 * in bitmap), but CFS may still find sched_idle CPUs,
+			 * so we must NOT skip CFS in that case.
+			 */
+			if (poc_cpu == -2)
+				goto give_up;
+		} else {
+			/*
+			 * poc_selector_active is off — POC is either disabled
+			 * by sysctl or suppressed while scx is running.
+			 * If an scx scheduler called us, flip poc_selector_skip
+			 * and schedule a workqueue item to re-enable POC with
+			 * bitmap resync.
+			 */
+			poc_check_skip_fallback();
+		}
+	}
+	poc_count(POC_FALLBACK);
+#endif /* CONFIG_SCHED_POC_SELECTOR */
+
+	if ((unsigned int)recent_used_cpu < nr_cpumask_bits) {
+		if ((available_idle_cpu(recent_used_cpu) || sched_idle_cpu(recent_used_cpu))) {
+			if (is_idle_core(recent_used_cpu))
+				return recent_used_cpu;
+			/* idle CPU but not idle core → preserve for give_up */
+		} else {
+			recent_used_cpu = -1;  /* not idle → discard */
+		}
+	}
+
+	if (sync && is_idle_core(target) &&
+	    asym_fits_cpu(task_util, util_min, util_max, target))
+		return target;
+
+	/*
+	 * If the previous CPU is cache affine and idle, don't be stupid:
+	 */
+	if (prev != target && cpus_share_cache(prev, target) &&
+	    (available_idle_cpu(prev) || sched_idle_cpu(prev)) &&
+	    asym_fits_cpu(task_util, util_min, util_max, prev)) {
+
+		if (!static_branch_unlikely(&sched_cluster_active) ||
+		    cpus_share_resources(prev, target))
+			return prev;
+
+		prev_aff = prev;
+	}
+
 	if (sched_smt_active()) {
 		has_idle_core = test_idle_cores(target);
 
@@ -8173,6 +8349,9 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 	if ((unsigned)i < nr_cpumask_bits)
 		return i;
 
+#ifdef CONFIG_SCHED_POC_SELECTOR
+give_up:
+#endif
 	/*
 	 * For cluster machines which have lower sharing cache like L2 or
 	 * LLC Tag, we tend to find an idle CPU in the target's cluster
@@ -8184,6 +8363,16 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target)
 	if ((unsigned int)recent_used_cpu < nr_cpumask_bits)
 		return recent_used_cpu;
 
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	/* Last resort: avoid enqueuing behind RT/DL tasks on target */
+	if (static_branch_likely(&poc_selector_active)) {
+		if (!rt_task(cpu_rq(target)->curr))
+			return target;
+
+		if (prev != target && !rt_task(cpu_rq(prev)->curr))
+			return prev;
+	}
+#endif
 	return target;
 }
 
@@ -9317,16 +9506,25 @@ static void yield_task_fair(struct rq *rq)
 	/*
 	 * Are we the only task in the tree?
 	 */
+#if !defined(CONFIG_SCHED_BORE)
 	if (unlikely(rq->nr_running == 1))
 		return;
 
 	clear_buddies(cfs_rq, se);
+#endif /* CONFIG_SCHED_BORE */
 
 	update_rq_clock(rq);
 	/*
 	 * Update run-time statistics of the 'current'.
 	 */
 	update_curr(cfs_rq);
+#ifdef CONFIG_SCHED_BORE
+	restart_burst_rescale_deadline_bore(curr);
+	if (unlikely(rq->nr_running == 1))
+		return;
+
+	clear_buddies(cfs_rq, se);
+#endif /* CONFIG_SCHED_BORE */
 	/*
 	 * Tell update_rq_clock() that we've just updated,
 	 * so we don't do microscopic update in schedule()
@@ -13806,6 +14004,9 @@ static void switched_to_fair(struct rq *rq, struct task_struct *p)
 	WARN_ON_ONCE(p->se.sched_delayed);
 
 	attach_task_cfs_rq(p);
+#ifdef CONFIG_SCHED_BORE
+	reset_task_bore(p);
+#endif /* CONFIG_SCHED_BORE */
 
 	set_task_max_allowed_capacity(p);
 

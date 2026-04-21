@@ -8,6 +8,7 @@
 #include "sched.h"
 
 #ifdef CONFIG_SCHED_BORE
+DEFINE_STATIC_KEY_TRUE(sched_bore_key);
 u8   __read_mostly sched_bore                   = 1;
 u8   __read_mostly sched_burst_inherit_type     = 2;
 u8   __read_mostly sched_burst_smoothness       = 1;
@@ -25,7 +26,8 @@ static int __maybe_unused maxval_12_bits = 4095;
 
 static u32 bore_reciprocal_lut[BURST_CACHE_SAMPLE_LIMIT + 1];
 
-static u32 (*inherit_penalty_fn)(struct task_struct *, u64, u64);
+DEFINE_STATIC_KEY_TRUE(sched_burst_inherit_key);
+DEFINE_STATIC_KEY_TRUE(sched_burst_ancestor_key);
 
 static inline u32 log2p1_u64_u32fp(u64 v, u8 fp) {
 	if (unlikely(!v)) return 0;
@@ -77,7 +79,8 @@ static void reweight_task_by_prio(struct task_struct *p, int prio) {
 
 u8 effective_prio_bore(struct task_struct *p) {
 	int prio = p->static_prio - MAX_RT_PRIO;
-	prio += p->bore.score & -(s32)sched_bore;
+	if (static_branch_likely(&sched_bore_key))
+		prio += p->bore.score;
 	prio &= ~(prio >> 31);
 	s32 diff = prio - maxval_prio;
 	prio -= (diff & ~(diff >> 31));
@@ -145,8 +148,9 @@ static inline bool task_is_bore_eligible(struct task_struct *p)
 
 static inline u32 count_children_upto2(struct task_struct *p) {
 	struct list_head *head = &p->children;
-	struct list_head *next = head->next;
-	return (next != head) + (next->next != head);
+	struct list_head *first = READ_ONCE(head->next);
+	struct list_head *second = READ_ONCE(first->next);
+	return (first != head) + (second != head);
 }
 
 static inline bool burst_cache_expired(struct bore_bc *bc, u64 now) {
@@ -166,10 +170,6 @@ static void update_burst_cache(struct bore_bc *bc,
 	};
 	WRITE_ONCE(bc->value, new_bc.value);
 }
-
-static u32 inherit_none(struct task_struct *parent,
-									u64 clone_flags, u64 now)
-{ return 0; }
 
 static u32 inherit_from_parent(struct task_struct *parent,
 									u64 clone_flags, u64 now) {
@@ -225,9 +225,13 @@ static u32 inherit_from_ancestor_hub(struct task_struct *parent,
 			if (scan_count++ >= BURST_CACHE_SCAN_LIMIT) break;
 
 			struct task_struct *descendant = direct_child;
-			while (count_children_upto2(descendant) == 1)
-				descendant = list_first_entry(&descendant->children,
-												struct task_struct, sibling);
+			while (count_children_upto2(descendant) == 1) {
+				struct task_struct *next_descendant =
+					list_first_or_null_rcu(&descendant->children,
+											struct task_struct, sibling);
+				if (!next_descendant) break;
+				descendant = next_descendant;
+			}
 
 			if (!task_is_bore_eligible(descendant)) continue;
 			count++;
@@ -248,10 +252,11 @@ static u32 inherit_from_thread_group(struct task_struct *p, u64 now) {
 
 	if (burst_cache_expired(bc, now)) {
 		struct task_struct *sibling;
-		u32 count = 0, total = 0;
+		u32 count = 0, total = 0, scan_count = 0;
 
 		for_each_thread(leader, sibling) {
 			if (count >= BURST_CACHE_SAMPLE_LIMIT) break;
+			if (scan_count++ >= BURST_CACHE_SCAN_LIMIT) break;
 
 			if (!task_is_bore_eligible(sibling)) continue;
 			count++;
@@ -267,13 +272,19 @@ static u32 inherit_from_thread_group(struct task_struct *p, u64 now) {
 
 void task_fork_bore(struct task_struct *p,
 	               struct task_struct *parent, u64 clone_flags, u64 now) {
-	if (!task_is_bore_eligible(p) || unlikely(!sched_bore)) return;
+	if (!static_branch_likely(&sched_bore_key) || !task_is_bore_eligible(p)) return;
 
 	rcu_read_lock();
 	struct bore_ctx *ctx = &p->bore;
-	u32 inherited_penalty = (clone_flags & CLONE_THREAD)?
-		inherit_from_thread_group(parent, now):
-		inherit_penalty_fn(parent, clone_flags, now);
+	u32 inherited_penalty;
+	if (clone_flags & CLONE_THREAD)
+		inherited_penalty = inherit_from_thread_group(parent, now);
+	else if (static_branch_likely(&sched_burst_inherit_key))
+		inherited_penalty = static_branch_likely(&sched_burst_ancestor_key)?
+			inherit_from_ancestor_hub(parent, clone_flags, now):
+			inherit_from_parent(parent, clone_flags, now);
+	else
+		inherited_penalty = 0;
 
 	if (ctx->prev_penalty < inherited_penalty)
 		ctx->prev_penalty = inherited_penalty;
@@ -291,13 +302,16 @@ void reset_task_bore(struct task_struct *p)
 static void update_inherit_type(void) {
 	switch(sched_burst_inherit_type) {
 	case 1:
-		inherit_penalty_fn = inherit_from_parent;
+		static_branch_enable(&sched_burst_inherit_key);
+		static_branch_disable(&sched_burst_ancestor_key);
 		break;
 	case 2:
-		inherit_penalty_fn = inherit_from_ancestor_hub;
+		static_branch_enable(&sched_burst_inherit_key);
+		static_branch_enable(&sched_burst_ancestor_key);
 		break;
 	default:
-		inherit_penalty_fn = inherit_none;
+		static_branch_disable(&sched_burst_inherit_key);
+		break;
 	}
 }
 
@@ -306,7 +320,7 @@ void __init sched_init_bore(void) {
 		SCHED_BORE_PROGNAME, SCHED_BORE_VERSION, SCHED_BORE_AUTHOR);
 
 	for (int i = 1; i <= BURST_CACHE_SAMPLE_LIMIT; i++)
-		bore_reciprocal_lut[i] = (u32)((0xffffffffULL + i) / i);
+		bore_reciprocal_lut[i] = (u32)div64_u64(0xffffffffULL + i, i);
 
 	reset_task_bore(&init_task);
 	update_inherit_type();
@@ -332,6 +346,11 @@ int sched_bore_update_handler(const struct ctl_table *table,
 	int ret = proc_dou8vec_minmax(table, write, buffer, lenp, ppos);
 	if (ret || !write)
 		return ret;
+
+	if (sched_bore)
+		static_branch_enable(&sched_bore_key);
+	else
+		static_branch_disable(&sched_bore_key);
 
 	readjust_all_task_weights();
 
