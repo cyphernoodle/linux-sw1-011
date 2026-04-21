@@ -29,6 +29,32 @@
  */
 
 #ifdef CONFIG_SCHED_POC_SELECTOR
+#include <linux/cpu.h>
+#include <linux/cpumask.h>
+#include <linux/export.h>
+#include <linux/init.h>
+#include <linux/interrupt.h>
+#include <linux/mutex.h>
+#include <linux/percpu.h>
+#include <linux/sched.h>
+#include <linux/stop_machine.h>
+#include <linux/types.h>
+
+#include <linux/kernel.h>
+#include <linux/jump_label.h>
+#include <linux/percpu.h>
+#include <linux/cpumask.h>
+#include <linux/sysctl.h>
+#include <linux/kobject.h>
+#include <linux/sysfs.h>
+#include <linux/slab.h>
+#include <linux/atomic.h>
+#include <linux/rcupdate.h>
+#include <linux/sched/topology.h>
+#include <linux/sched/idle.h>
+#include <linux/printk.h>
+#include "sched.h"
+
 
 /**************************************************************
  * Version Information:
