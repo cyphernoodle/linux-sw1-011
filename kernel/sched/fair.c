@@ -4090,6 +4090,13 @@ void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 	if (se->on_rq) {
 		/* commit outstanding execution time */
 		update_curr(cfs_rq);
+#ifdef CONFIG_SCHED_BORE
+	restart_burst_rescale_deadline_bore(task_of(curr));
+	if (unlikely(rq->nr_running == 1))
+		return;
+
+	clear_buddies(cfs_rq, se);
+#endif /* CONFIG_SCHED_BORE */
 		avruntime = avg_vruntime(cfs_rq);
 		se->vlag = entity_lag(cfs_rq, se, avruntime);
 		se->deadline -= avruntime;
@@ -5395,13 +5402,13 @@ void __setparam_fair(struct task_struct *p, const struct sched_attr *attr)
 static void
 place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 {
-	u64 vslice, vruntime = avg_vruntime(cfs_rq);
+	u64 vslice = 0, vruntime = avg_vruntime(cfs_rq);
 	bool update_zero = false;
 	s64 lag = 0;
 
 	if (!se->custom_slice)
 		se->slice = sysctl_sched_base_slice;
-	vslice = calc_delta_fair(se->slice, se);
+
 
 	/*
 	 * Due to how V is constructed as the weighted average of entities,
@@ -5519,7 +5526,7 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 			task_of(se)->bore.futex_waiting)
 		goto vslice_found;
 #endif /* !CONFIG_SCHED_BORE */
-	vslice = calc_delta_fair(se->slice, se);
+
 #ifdef CONFIG_SCHED_BORE
 	if (static_branch_likely(&sched_bore_key))
 		vslice >>= !!(flags & (ENQUEUE_INITIAL | ENQUEUE_WAKEUP));
@@ -5534,6 +5541,9 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		vslice /= 2;
 
 #ifdef CONFIG_SCHED_BORE
+vslice_found:
+#endif /* CONFIG_SCHED_BORE */
+	#ifdef CONFIG_SCHED_BORE
 vslice_found:
 #endif /* CONFIG_SCHED_BORE */
 	/*
@@ -5561,6 +5571,13 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		place_entity(cfs_rq, se, flags);
 
 	update_curr(cfs_rq);
+#ifdef CONFIG_SCHED_BORE
+	restart_burst_rescale_deadline_bore(task_of(curr));
+	if (unlikely(rq->nr_running == 1))
+		return;
+
+	clear_buddies(cfs_rq, se);
+#endif /* CONFIG_SCHED_BORE */
 
 	/*
 	 * When enqueuing a sched_entity, we must:
@@ -5679,6 +5696,13 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	int action = UPDATE_TG;
 
 	update_curr(cfs_rq);
+#ifdef CONFIG_SCHED_BORE
+	restart_burst_rescale_deadline_bore(task_of(curr));
+	if (unlikely(rq->nr_running == 1))
+		return;
+
+	clear_buddies(cfs_rq, se);
+#endif /* CONFIG_SCHED_BORE */
 	clear_buddies(cfs_rq, se);
 
 	if (flags & DEQUEUE_DELAYED) {
@@ -5698,6 +5722,9 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 		    !entity_eligible(cfs_rq, se)) {
 			update_load_avg(cfs_rq, se, 0);
 			update_entity_lag(cfs_rq, se);
+#ifdef CONFIG_SCHED_BORE
+		vlag_unscaled = se->vlag;
+#endif /* !CONFIG_SCHED_BORE */
 			set_delayed(se);
 			return false;
 		}
@@ -5721,6 +5748,9 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	update_stats_dequeue_fair(cfs_rq, se, flags);
 
 	update_entity_lag(cfs_rq, se);
+#ifdef CONFIG_SCHED_BORE
+		vlag_unscaled = se->vlag;
+#endif /* !CONFIG_SCHED_BORE */
 	if (sched_feat(PLACE_REL_DEADLINE) && !sleep) {
 		se->deadline -= se->vruntime;
 		se->rel_deadline = 1;
@@ -5832,6 +5862,13 @@ static void put_prev_entity(struct cfs_rq *cfs_rq, struct sched_entity *prev)
 	 */
 	if (prev->on_rq)
 		update_curr(cfs_rq);
+#ifdef CONFIG_SCHED_BORE
+	restart_burst_rescale_deadline_bore(task_of(curr));
+	if (unlikely(rq->nr_running == 1))
+		return;
+
+	clear_buddies(cfs_rq, se);
+#endif /* CONFIG_SCHED_BORE */
 
 	/* throttle cfs_rqs exceeding runtime */
 	check_cfs_rq_runtime(cfs_rq);
@@ -5854,6 +5891,13 @@ entity_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr, int queued)
 	 * Update run-time statistics of the 'current'.
 	 */
 	update_curr(cfs_rq);
+#ifdef CONFIG_SCHED_BORE
+	restart_burst_rescale_deadline_bore(task_of(curr));
+	if (unlikely(rq->nr_running == 1))
+		return;
+
+	clear_buddies(cfs_rq, se);
+#endif /* CONFIG_SCHED_BORE */
 
 	/*
 	 * Ensure that runnable average is periodically updated.
@@ -7207,7 +7251,17 @@ requeue_delayed_entity(struct sched_entity *se, int flags)
 		cfs_rq->nr_queued--;
 		if (se != cfs_rq->curr)
 			__dequeue_entity(cfs_rq, se);
-		place_entity(cfs_rq, se, 0);
+		#ifdef CONFIG_SCHED_BORE
+		if (curr) {
+			se->vruntime += vlag_unscaled - se->vlag;
+			if (se->rel_deadline) {
+				se->deadline += se->vruntime;
+				se->rel_deadline = 0;
+			}
+		}
+		else
+#endif /* !CONFIG_SCHED_BORE */
+		place_entity(cfs_rq, se, flags);
 		if (se != cfs_rq->curr)
 			__enqueue_entity(cfs_rq, se);
 		cfs_rq->nr_queued++;
@@ -7474,6 +7528,13 @@ static bool dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 	if ((flags & DEQUEUE_SLEEP) && entity_is_task(se)) {
 		if (cfs_rq->curr == se)
 			update_curr(cfs_rq);
+#ifdef CONFIG_SCHED_BORE
+	restart_burst_rescale_deadline_bore(task_of(curr));
+	if (unlikely(rq->nr_running == 1))
+		return;
+
+	clear_buddies(cfs_rq, se);
+#endif /* CONFIG_SCHED_BORE */
 		restart_burst_bore(p);
 	}
 #endif /* CONFIG_SCHED_BORE */
@@ -9284,6 +9345,13 @@ static void wakeup_preempt_fair(struct rq *rq, struct task_struct *p, int wake_f
 
 	cfs_rq = cfs_rq_of(se);
 	update_curr(cfs_rq);
+#ifdef CONFIG_SCHED_BORE
+	restart_burst_rescale_deadline_bore(task_of(curr));
+	if (unlikely(rq->nr_running == 1))
+		return;
+
+	clear_buddies(cfs_rq, se);
+#endif /* CONFIG_SCHED_BORE */
 	/*
 	 * If @p has a shorter slice than current and @p is eligible, override
 	 * current's slice protection in order to allow preemption.
@@ -9365,6 +9433,13 @@ again:
 		/* Might not have done put_prev_entity() */
 		if (cfs_rq->curr && cfs_rq->curr->on_rq)
 			update_curr(cfs_rq);
+#ifdef CONFIG_SCHED_BORE
+	restart_burst_rescale_deadline_bore(task_of(curr));
+	if (unlikely(rq->nr_running == 1))
+		return;
+
+	clear_buddies(cfs_rq, se);
+#endif /* CONFIG_SCHED_BORE */
 
 		throttled |= check_cfs_rq_runtime(cfs_rq);
 
@@ -9507,8 +9582,12 @@ static void yield_task_fair(struct rq *rq)
 	 * Are we the only task in the tree?
 	 */
 #if !defined(CONFIG_SCHED_BORE)
+	#if !defined(CONFIG_SCHED_BORE)
 	if (unlikely(rq->nr_running == 1))
 		return;
+
+	clear_buddies(cfs_rq, se);
+#endif /* CONFIG_SCHED_BORE */
 
 	clear_buddies(cfs_rq, se);
 #endif /* CONFIG_SCHED_BORE */
@@ -9519,9 +9598,20 @@ static void yield_task_fair(struct rq *rq)
 	 */
 	update_curr(cfs_rq);
 #ifdef CONFIG_SCHED_BORE
-	restart_burst_rescale_deadline_bore(curr);
+	restart_burst_rescale_deadline_bore(task_of(curr));
 	if (unlikely(rq->nr_running == 1))
 		return;
+
+	clear_buddies(cfs_rq, se);
+#endif /* CONFIG_SCHED_BORE */
+#ifdef CONFIG_SCHED_BORE
+	restart_burst_rescale_deadline_bore(curr);
+	#if !defined(CONFIG_SCHED_BORE)
+	if (unlikely(rq->nr_running == 1))
+		return;
+
+	clear_buddies(cfs_rq, se);
+#endif /* CONFIG_SCHED_BORE */
 
 	clear_buddies(cfs_rq, se);
 #endif /* CONFIG_SCHED_BORE */
@@ -14007,6 +14097,9 @@ static void switched_to_fair(struct rq *rq, struct task_struct *p)
 #ifdef CONFIG_SCHED_BORE
 	reset_task_bore(p);
 #endif /* CONFIG_SCHED_BORE */
+#ifdef CONFIG_SCHED_BORE
+	reset_task_bore(p);
+#endif /* CONFIG_SCHED_BORE */
 
 	set_task_max_allowed_capacity(p);
 
@@ -14090,6 +14183,9 @@ static void task_change_group_fair(struct task_struct *p)
 	p->se.avg.last_update_time = 0;
 	set_task_rq(p, task_cpu(p));
 	attach_task_cfs_rq(p);
+#ifdef CONFIG_SCHED_BORE
+	reset_task_bore(p);
+#endif /* CONFIG_SCHED_BORE */
 }
 
 void free_fair_sched_group(struct task_group *tg)

@@ -5724,6 +5724,9 @@ static void scx_root_disable(struct scx_sched *sch)
 		pr_warn("sched_ext: ops error detected without ops (%s)\n",
 			sch->exit_info->msg);
 		WARN_ON_ONCE(scx_set_enable_state(SCX_DISABLED) != SCX_DISABLING);
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	poc_notify_scx(false);
+#endif
 		goto done;
 	default:
 		break;
@@ -5836,6 +5839,9 @@ static void scx_root_disable(struct scx_sched *sch)
 	mutex_unlock(&scx_enable_mutex);
 
 	WARN_ON_ONCE(scx_set_enable_state(SCX_DISABLED) != SCX_DISABLING);
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	poc_notify_scx(false);
+#endif
 done:
 	scx_bypass(sch, false);
 }
