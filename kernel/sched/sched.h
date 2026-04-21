@@ -1174,7 +1174,6 @@ struct rq {
 #endif /* CONFIG_NO_HZ_COMMON */
 
 
-	u64			nr_switches;
 
 #ifdef CONFIG_UCLAMP_TASK
 	/* Utilization clamp values based on CPU's RUNNABLE tasks */
@@ -3413,13 +3412,23 @@ static inline void nohz_run_idle_balance(int cpu) { }
 #endif
 
 
-extern struct static_key_true sched_poc_aligned;
+
+#ifdef CONFIG_SCHED_POC_SELECTOR
+extern struct static_key_true poc_selector_active;
+extern struct static_key_false sched_poc_smt_fallback;
+extern struct static_key_true sched_poc_eager_commit;
 extern struct static_key_true sched_poc_smt_consecutive;
 extern struct static_key_true sched_poc_smt_uniform;
 extern struct static_key_false sched_poc_target_sticky;
+extern struct static_key_true sched_poc_early_select;
+extern struct static_key_true sched_poc_greedy_search;
+extern struct static_key_true sched_poc_aligned;
 extern struct static_key_true sched_poc_packed;
 extern struct static_key_false sched_poc_lockless_bitmap;
+extern struct static_key_false sched_poc_count_enabled;
+extern int poc_select_idle_cpu(struct task_struct *p, int prev, int target);
 extern void __set_cpu_idle_state_poc(int cpu, int state);
+
 static __always_inline void set_cpu_idle_state_poc(int cpu, int state)
 {
 	if (static_branch_likely(&poc_selector_active) &&
@@ -3509,7 +3518,6 @@ static __always_inline u64 poc_cpumask_to_u64(const struct cpumask *mask,
 		return (lo >> shift) | (hi << (64 - shift));
 	}
 }
-
 #else
 static inline void set_cpu_idle_state_poc(int cpu, int state) { }
 #endif
@@ -4256,30 +4264,9 @@ DEFINE_CLASS_IS_UNCONDITIONAL(sched_change)
 
 
 extern void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, unsigned long weight);
-#ifdef CONFIG_SCHED_POC_SELECTOR
-extern struct static_key_false sched_poc_smt_fallback;
-extern struct static_key_true sched_poc_eager_commit;
-extern struct static_key_true sched_poc_greedy_search;
-extern struct static_key_false sched_poc_count_enabled;
-extern int poc_select_idle_cpu(struct task_struct *p, int prev, int target);
-#endif
 
-#ifdef CONFIG_SCHED_POC_SELECTOR
-extern struct static_key_true poc_selector_active;
-extern struct static_key_false sched_poc_smt_fallback;
-extern struct static_key_true sched_poc_eager_commit;
-extern struct static_key_true sched_poc_smt_consecutive;
-extern struct static_key_true sched_poc_smt_uniform;
-extern struct static_key_false sched_poc_target_sticky;
-extern struct static_key_true sched_poc_early_select;
-extern struct static_key_true sched_poc_greedy_search;
-extern struct static_key_true sched_poc_aligned;
-extern struct static_key_true sched_poc_packed;
-extern struct static_key_false sched_poc_lockless_bitmap;
-extern struct static_key_false sched_poc_count_enabled;
-extern int poc_select_idle_cpu(struct task_struct *p, int prev, int target);
-extern void __set_cpu_idle_state_poc(int cpu, int state);
-#endif
+
+
 
 #include "ext.h"
 
