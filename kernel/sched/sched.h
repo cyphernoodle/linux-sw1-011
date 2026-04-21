@@ -4144,6 +4144,7 @@ static inline void set_cpu_idle_state_poc(int cpu, int state)
 }
 #endif
 
+extern void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, unsigned long weight);
 #include "ext.h"
 
 #endif /* _KERNEL_SCHED_SCHED_H */
