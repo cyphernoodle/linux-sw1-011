@@ -1,0 +1,56 @@
+diff --git a/drivers/mailbox/pcc.c b/drivers/mailbox/pcc.c
+index 9baa8ea27..22e70af1a 100644
+--- a/drivers/mailbox/pcc.c
++++ b/drivers/mailbox/pcc.c
+@@ -505,6 +505,7 @@ static const struct mbox_chan_ops pcc_chan_ops = {
+	.send_data = pcc_send_data,
+	.startup = pcc_startup,
+	.shutdown = pcc_shutdown,
++	.last_tx_done = pcc_last_tx_done,
+ };
+
+ /**
+diff --git a/net/netfilter/nfnetlink_queue.c b/net/netfilter/nfnetlink_queue.c
+index 6b9c96981..cfebf40ee 100644
+--- a/net/netfilter/nfnetlink_queue.c
++++ b/net/netfilter/nfnetlink_queue.c
+@@ -67,9 +67,6 @@ struct nfqnl_packet_key {
+	u16 queue_num;
+ } __aligned(sizeof(u32));  /* jhash2 requires 32-bit alignment */
+
+-/* Global rhashtable - one for entire system, all netns */
+-static struct rhashtable nfqnl_packet_map __read_mostly;
+-
+ /* Helper to initialize composite key */
+ static inline void nfqnl_init_key(struct nfqnl_packet_key *key,
+				  struct net *net, u32 packet_id, u16 queue_num)
+diff --git a/tools/objtool/check.c b/tools/objtool/check.c
+index 9b11cf319..b3554ec43 100644
+--- a/tools/objtool/check.c
++++ b/tools/objtool/check.c
+@@ -1307,18 +1307,19 @@ static const char *uaccess_safe_builtin[] = {
+
+ static void add_uaccess_safe(struct objtool_file *file)
+ {
+-	struct symbol *func;
+	const char **name;
+
+	if (!opts.uaccess)
+		return;
+
+-	for (name = uaccess_safe_builtin; *name; name++) {
+-		func = find_symbol_by_name(file->elf, *name);
+-		if (!func)
+-			continue;
+-
+-		func->uaccess_safe = true;
++	struct symbol *sym;
++	for_each_sym(file->elf, sym) {
++		for (name = uaccess_safe_builtin; *name; name++) {
++			if (!strcmp(sym->name, *name)) {
++				sym->uaccess_safe = true;
++				break;
++			}
++		}
+	}
+ }

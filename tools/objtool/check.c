@@ -1307,18 +1307,19 @@ static const char *uaccess_safe_builtin[] = {
 
 static void add_uaccess_safe(struct objtool_file *file)
 {
-	struct symbol *func;
 	const char **name;
 
 	if (!opts.uaccess)
 		return;
 
-	for (name = uaccess_safe_builtin; *name; name++) {
-		func = find_symbol_by_name(file->elf, *name);
-		if (!func)
-			continue;
-
-		func->uaccess_safe = true;
+	struct symbol *sym;
+	for_each_sym(file->elf, sym) {
+		for (name = uaccess_safe_builtin; *name; name++) {
+			if (!strcmp(sym->name, *name)) {
+				sym->uaccess_safe = true;
+				break;
+			}
+		}
 	}
 }
 
