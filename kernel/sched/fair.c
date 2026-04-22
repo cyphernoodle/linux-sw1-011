@@ -4091,10 +4091,8 @@ void reweight_entity(struct cfs_rq *cfs_rq, struct sched_entity *se,
 		/* commit outstanding execution time */
 		update_curr(cfs_rq);
 #ifdef CONFIG_SCHED_BORE
-	restart_burst_rescale_deadline_bore(task_of(curr));
-	if (unlikely(rq->nr_running == 1))
-		return;
-
+	if (entity_is_task(se))
+		restart_burst_rescale_deadline_bore(task_of(se));
 	clear_buddies(cfs_rq, se);
 #endif /* CONFIG_SCHED_BORE */
 		avruntime = avg_vruntime(cfs_rq);
@@ -5540,12 +5538,7 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	if (sched_feat(PLACE_DEADLINE_INITIAL) && (flags & ENQUEUE_INITIAL))
 		vslice /= 2;
 
-#ifdef CONFIG_SCHED_BORE
 vslice_found:
-#endif /* CONFIG_SCHED_BORE */
-	#ifdef CONFIG_SCHED_BORE
-vslice_found:
-#endif /* CONFIG_SCHED_BORE */
 	/*
 	 * EEVDF: vd_i = ve_i + r_i/w_i
 	 */
@@ -5572,10 +5565,8 @@ enqueue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 
 	update_curr(cfs_rq);
 #ifdef CONFIG_SCHED_BORE
-	restart_burst_rescale_deadline_bore(task_of(curr));
-	if (unlikely(rq->nr_running == 1))
-		return;
-
+	if (entity_is_task(se))
+		restart_burst_rescale_deadline_bore(task_of(se));
 	clear_buddies(cfs_rq, se);
 #endif /* CONFIG_SCHED_BORE */
 
@@ -5692,15 +5683,14 @@ static void clear_delayed(struct sched_entity *se)
 static bool
 dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 {
+	s64 vlag_unscaled = 0;
 	bool sleep = flags & DEQUEUE_SLEEP;
 	int action = UPDATE_TG;
 
 	update_curr(cfs_rq);
 #ifdef CONFIG_SCHED_BORE
-	restart_burst_rescale_deadline_bore(task_of(curr));
-	if (unlikely(rq->nr_running == 1))
-		return;
-
+	if (entity_is_task(se))
+		restart_burst_rescale_deadline_bore(task_of(se));
 	clear_buddies(cfs_rq, se);
 #endif /* CONFIG_SCHED_BORE */
 	clear_buddies(cfs_rq, se);
@@ -5863,11 +5853,9 @@ static void put_prev_entity(struct cfs_rq *cfs_rq, struct sched_entity *prev)
 	if (prev->on_rq)
 		update_curr(cfs_rq);
 #ifdef CONFIG_SCHED_BORE
-	restart_burst_rescale_deadline_bore(task_of(curr));
-	if (unlikely(rq->nr_running == 1))
-		return;
-
-	clear_buddies(cfs_rq, se);
+	if (entity_is_task(prev))
+		restart_burst_rescale_deadline_bore(task_of(prev));
+	clear_buddies(cfs_rq, prev);
 #endif /* CONFIG_SCHED_BORE */
 
 	/* throttle cfs_rqs exceeding runtime */
@@ -5892,11 +5880,9 @@ entity_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr, int queued)
 	 */
 	update_curr(cfs_rq);
 #ifdef CONFIG_SCHED_BORE
-	restart_burst_rescale_deadline_bore(task_of(curr));
-	if (unlikely(rq->nr_running == 1))
-		return;
-
-	clear_buddies(cfs_rq, se);
+	if (entity_is_task(curr))
+		restart_burst_rescale_deadline_bore(task_of(curr));
+	clear_buddies(cfs_rq, curr);
 #endif /* CONFIG_SCHED_BORE */
 
 	/*
@@ -7237,6 +7223,7 @@ static int choose_idle_cpu(int cpu, struct task_struct *p)
 static void
 requeue_delayed_entity(struct sched_entity *se, int flags)
 {
+	s64 vlag_unscaled = 0;
 	struct cfs_rq *cfs_rq = cfs_rq_of(se);
 
 	/*
@@ -7252,7 +7239,7 @@ requeue_delayed_entity(struct sched_entity *se, int flags)
 		if (se != cfs_rq->curr)
 			__dequeue_entity(cfs_rq, se);
 		#ifdef CONFIG_SCHED_BORE
-		if (curr) {
+		if (cfs_rq_of(se)->curr == se) {
 			se->vruntime += vlag_unscaled - se->vlag;
 			if (se->rel_deadline) {
 				se->deadline += se->vruntime;
@@ -7529,11 +7516,8 @@ static bool dequeue_task_fair(struct rq *rq, struct task_struct *p, int flags)
 		if (cfs_rq->curr == se)
 			update_curr(cfs_rq);
 #ifdef CONFIG_SCHED_BORE
-	restart_burst_rescale_deadline_bore(task_of(curr));
-	if (unlikely(rq->nr_running == 1))
-		return;
-
-	clear_buddies(cfs_rq, se);
+	restart_burst_rescale_deadline_bore(p);
+	clear_buddies(cfs_rq, &p->se);
 #endif /* CONFIG_SCHED_BORE */
 		restart_burst_bore(p);
 	}
@@ -8223,7 +8207,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target, int 
 	if (recent_used_cpu != prev &&
 	    recent_used_cpu != target &&
 	    cpus_share_cache(recent_used_cpu, target) &&
-	    (available_idle_cpu(recent_used_cpu) || sched_idle_cpu(recent_used_cpu)) &&
+	    (available_idle_cpu(recent_used_cpu) || sched_idle_rq(cpu_rq(recent_used_cpu))) &&
 	    cpumask_test_cpu(recent_used_cpu, p->cpus_ptr)) {
 #ifdef CONFIG_SCHED_POC_SELECTOR
 		if (!static_branch_likely(&poc_selector_active) ||
@@ -8369,7 +8353,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target, int 
 #endif /* CONFIG_SCHED_POC_SELECTOR */
 
 	if ((unsigned int)recent_used_cpu < nr_cpumask_bits) {
-		if ((available_idle_cpu(recent_used_cpu) || sched_idle_cpu(recent_used_cpu))) {
+		if ((available_idle_cpu(recent_used_cpu) || sched_idle_rq(cpu_rq(recent_used_cpu)))) {
 			if (is_idle_core(recent_used_cpu))
 				return recent_used_cpu;
 			/* idle CPU but not idle core → preserve for give_up */
@@ -8386,7 +8370,7 @@ static int select_idle_sibling(struct task_struct *p, int prev, int target, int 
 	 * If the previous CPU is cache affine and idle, don't be stupid:
 	 */
 	if (prev != target && cpus_share_cache(prev, target) &&
-	    (available_idle_cpu(prev) || sched_idle_cpu(prev)) &&
+	    (available_idle_cpu(prev) || sched_idle_rq(cpu_rq(prev))) &&
 	    asym_fits_cpu(task_util, util_min, util_max, prev)) {
 
 		if (!static_branch_unlikely(&sched_cluster_active) ||
@@ -9109,7 +9093,7 @@ select_task_rq_fair(struct task_struct *p, int prev_cpu, int wake_flags)
 
 	/* Fast path */
 	if (wake_flags & WF_TTWU)
-		return select_idle_sibling(p, prev_cpu, new_cpu);
+		return select_idle_sibling(p, prev_cpu, new_cpu, wake_flags & WF_SYNC);
 
 	return new_cpu;
 }
@@ -9346,11 +9330,10 @@ static void wakeup_preempt_fair(struct rq *rq, struct task_struct *p, int wake_f
 	cfs_rq = cfs_rq_of(se);
 	update_curr(cfs_rq);
 #ifdef CONFIG_SCHED_BORE
-	restart_burst_rescale_deadline_bore(task_of(curr));
-	if (unlikely(rq->nr_running == 1))
-		return;
-
-	clear_buddies(cfs_rq, se);
+	if (cfs_rq->curr && entity_is_task(cfs_rq->curr)) {
+		restart_burst_rescale_deadline_bore(task_of(cfs_rq->curr));
+		clear_buddies(cfs_rq, cfs_rq->curr);
+	}
 #endif /* CONFIG_SCHED_BORE */
 	/*
 	 * If @p has a shorter slice than current and @p is eligible, override
@@ -9434,11 +9417,10 @@ again:
 		if (cfs_rq->curr && cfs_rq->curr->on_rq)
 			update_curr(cfs_rq);
 #ifdef CONFIG_SCHED_BORE
-	restart_burst_rescale_deadline_bore(task_of(curr));
-	if (unlikely(rq->nr_running == 1))
-		return;
-
-	clear_buddies(cfs_rq, se);
+	if (cfs_rq->curr && entity_is_task(cfs_rq->curr)) {
+		restart_burst_rescale_deadline_bore(task_of(cfs_rq->curr));
+		clear_buddies(cfs_rq, cfs_rq->curr);
+	}
 #endif /* CONFIG_SCHED_BORE */
 
 		throttled |= check_cfs_rq_runtime(cfs_rq);
@@ -9581,16 +9563,10 @@ static void yield_task_fair(struct rq *rq)
 	/*
 	 * Are we the only task in the tree?
 	 */
-#if !defined(CONFIG_SCHED_BORE)
-	#if !defined(CONFIG_SCHED_BORE)
 	if (unlikely(rq->nr_running == 1))
 		return;
 
 	clear_buddies(cfs_rq, se);
-#endif /* CONFIG_SCHED_BORE */
-
-	clear_buddies(cfs_rq, se);
-#endif /* CONFIG_SCHED_BORE */
 
 	update_rq_clock(rq);
 	/*
@@ -9598,28 +9574,9 @@ static void yield_task_fair(struct rq *rq)
 	 */
 	update_curr(cfs_rq);
 #ifdef CONFIG_SCHED_BORE
-	restart_burst_rescale_deadline_bore(task_of(curr));
-	if (unlikely(rq->nr_running == 1))
-		return;
-
-	clear_buddies(cfs_rq, se);
+	restart_burst_rescale_deadline_bore(rq->curr);
+	clear_buddies(cfs_rq, &rq->curr->se);
 #endif /* CONFIG_SCHED_BORE */
-#ifdef CONFIG_SCHED_BORE
-	restart_burst_rescale_deadline_bore(curr);
-	#if !defined(CONFIG_SCHED_BORE)
-	if (unlikely(rq->nr_running == 1))
-		return;
-
-	clear_buddies(cfs_rq, se);
-#endif /* CONFIG_SCHED_BORE */
-
-	clear_buddies(cfs_rq, se);
-#endif /* CONFIG_SCHED_BORE */
-	/*
-	 * Tell update_rq_clock() that we've just updated,
-	 * so we don't do microscopic update in schedule()
-	 * and double the fastpath cost.
-	 */
 	rq_clock_skip_update(rq);
 
 	/*
