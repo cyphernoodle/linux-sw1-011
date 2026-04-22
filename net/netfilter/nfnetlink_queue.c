@@ -67,9 +67,6 @@ struct nfqnl_packet_key {
 	u16 queue_num;
 } __aligned(sizeof(u32));  /* jhash2 requires 32-bit alignment */
 
-/* Global rhashtable - one for entire system, all netns */
-static struct rhashtable nfqnl_packet_map __read_mostly;
-
 /* Helper to initialize composite key */
 static inline void nfqnl_init_key(struct nfqnl_packet_key *key,
 				  struct net *net, u32 packet_id, u16 queue_num)
