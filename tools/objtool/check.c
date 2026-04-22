@@ -3437,9 +3437,18 @@ static bool insn_cfi_match(struct instruction *insn, struct cfi_state *cfi2)
 
 static inline bool func_uaccess_safe(struct symbol *func)
 {
-	if (func)
-		return func->uaccess_safe;
+	if (func) {
+		if (func->uaccess_safe)
+			return true;
 
+		if (func->name) {
+			const char **name;
+			for (name = uaccess_safe_builtin; *name; name++) {
+				if (!strcmp(func->name, *name))
+					return true;
+			}
+		}
+	}
 	return false;
 }
 
