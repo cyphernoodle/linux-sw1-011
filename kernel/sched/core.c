@@ -2794,6 +2794,7 @@ int tg_nop(struct task_group *tg, void *data)
 	return 0;
 
 }
+#endif
 
 void set_load_weight(struct task_struct *p, bool update_load)
 {
