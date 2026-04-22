@@ -1,7 +1,3 @@
-#ifdef CONFIG_SCHED_BORE
-	sched_init_bore();
-#endif /* CONFIG_SCHED_BORE */
-
 // SPDX-License-Identifier: GPL-2.0-only
 
 /*
@@ -352,7 +348,6 @@ __setup("sched_proxy_exec", setup_proxy_exec);
  */
 
 #define SCHED_FEAT(name, enabled)	\
-
 	(1UL << __SCHED_FEAT_##name) * enabled |
 
 __read_mostly unsigned int sysctl_sched_features =
@@ -1910,23 +1905,14 @@ static inline void hrtick_schedule_exit(struct rq *rq) { }
  */
 
 #define fetch_or(ptr, mask)						\
-
 	({								\
-
 		typeof(ptr) _ptr = (ptr);				\
-
 		typeof(mask) _mask = (mask);				\
-
 		typeof(*_ptr) _val = *_ptr;				\
-
 									\
-
 		do {							\
-
 		} while (!try_cmpxchg(_ptr, &_val, _val | _mask));	\
-
 	_val;								\
-
 })
 
 
@@ -2807,20 +2793,10 @@ int tg_nop(struct task_group *tg, void *data)
 
 	return 0;
 
-#ifdef CONFIG_SCHED_BORE
-
-	int prio = effective_prio_bore(p);
-
-#else /* !CONFIG_SCHED_BORE */
-
-	int prio = p->static_prio - MAX_RT_PRIO;
-
-#endif /* CONFIG_SCHED_BORE */
-
-#endif
-
+}
 
 void set_load_weight(struct task_struct *p, bool update_load)
+{
 
 #ifdef CONFIG_SCHED_BORE
 
@@ -10861,7 +10837,6 @@ static inline void sched_tick_stop(int cpu) { }
 
 
 #if defined(CONFIG_PREEMPTION) && (defined(CONFIG_DEBUG_PREEMPT) || \
-
 				defined(CONFIG_TRACE_PREEMPT_TOGGLE))
 
 /*
@@ -14940,17 +14915,11 @@ static void __init preempt_dynamic_init(void)
 
 
 # define PREEMPT_MODEL_ACCESSOR(mode) \
-
 	bool preempt_model_##mode(void)						 \
-
 	{									 \
-
 		WARN_ON_ONCE(preempt_dynamic_mode == preempt_dynamic_undefined); \
-
 		return preempt_dynamic_mode == preempt_dynamic_##mode;		 \
-
 	}									 \
-
 	EXPORT_SYMBOL_GPL(preempt_model_##mode)
 
 
@@ -16610,6 +16579,7 @@ void __init sched_init(void)
 	}
 
 
+#endif /* CONFIG_SCHED_BORE */
 	init_defrootdomain();
 
 
@@ -16819,7 +16789,7 @@ void __init sched_init(void)
 
 	set_load_weight(&init_task, false);
 
-	init_task.se.slice = sysctl_sched_base_slice,
+	init_task.se.slice = sysctl_sched_base_slice;
 
 
 	/*
@@ -16887,6 +16857,9 @@ void __init sched_init(void)
 	preempt_dynamic_init();
 
 
+#ifdef CONFIG_SCHED_BORE
+	sched_init_bore();
+#endif
 	scheduler_running = 1;
 
 }
