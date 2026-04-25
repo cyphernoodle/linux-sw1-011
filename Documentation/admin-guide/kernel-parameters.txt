@@ -2411,23 +2411,6 @@ Kernel parameters
 			[IMA] Define a custom template format.
 			Format: { "field1|...|fieldN" }
 
-	ima.ahash_minsize= [IMA] Minimum file size for asynchronous hash usage
-			Format: <min_file_size>
-			Set the minimal file size for using asynchronous hash.
-			If left unspecified, ahash usage is disabled.
-
-			ahash performance varies for different data sizes on
-			different crypto accelerators. This option can be used
-			to achieve the best performance for a particular HW.
-
-	ima.ahash_bufsize= [IMA] Asynchronous hash buffer size
-			Format: <bufsize>
-			Set hashing buffer size. Default: 4k.
-
-			ahash performance varies for different chunk sizes on
-			different crypto accelerators. This option can be used
-			to achieve best performance for particular HW.
-
 	ima=		[IMA] Enable or disable IMA
 			Format: { "off" | "on" }
 			Default: "on"
@@ -3268,8 +3251,8 @@ Kernel parameters
 			for the host. To force nVHE on VHE hardware, add
 			"arm64_sw.hvhe=0 id_aa64mmfr1.vh=0" to the
 			command-line.
-			"nested" is experimental and should be used with
-			extreme caution.
+			"nested" and "protected" are experimental and should be
+			used with extreme caution.
 
 	kvm-arm.vgic_v3_group0_trap=
 			[KVM,ARM,EARLY] Trap guest accesses to GICv3 group-0
