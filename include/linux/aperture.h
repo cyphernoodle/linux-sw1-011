@@ -56,7 +56,9 @@ static inline int aperture_remove_conflicting_pci_devices(struct pci_dev *pdev, 
  */
 static inline int aperture_remove_all_conflicting_devices(const char *name)
 {
-	return aperture_remove_conflicting_devices(0, (resource_size_t)-1, name);
+	int ret = aperture_remove_conflicting_devices(0, (resource_size_t)-1, name);
+
+	return (ret < 0) ? ret : 0;
 }
 
 #endif

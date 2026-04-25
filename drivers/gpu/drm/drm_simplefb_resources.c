@@ -35,7 +35,7 @@
  * the fb probe will not help us much either. So just complain and carry on,
  * and hope that the user actually gets a working fb at the end of things.
  */
-static int simplefb_init_clocks(struct device *dev, struct simplefb_resources *res)
+static int simplefb_get_clocks(struct device *dev, struct simplefb_resources *res)
 {
 	struct clk *clock;
 	unsigned int i;
@@ -52,15 +52,10 @@ static int simplefb_init_clocks(struct device *dev, struct simplefb_resources *r
 	for (i = 0; i < res->clk_count; ++i) {
 		clock = of_clk_get(dev->of_node, i);
 		if (IS_ERR(clock)) {
-			ret = dev_err_probe(dev, PTR_ERR(clock), "getting clock %u\n", i);
+			dev_err(dev, "Error %pe getting clock %u\n", clock, i);
+			ret = PTR_ERR(clock);
 			if (ret == -EPROBE_DEFER)
 				goto err;
-			continue;
-		}
-		ret = clk_prepare_enable(clock);
-		if (ret) {
-			dev_err_probe(dev, ret, "enabling clock %u\n", i);
-			clk_put(clock);
 			continue;
 		}
 		res->clks[i] = clock;
@@ -69,35 +64,40 @@ static int simplefb_init_clocks(struct device *dev, struct simplefb_resources *r
 	return 0;
 
 err:
-	while (i) {
-		--i;
-		if (res->clks[i]) {
-			clk_disable_unprepare(res->clks[i]);
-			clk_put(res->clks[i]);
-		}
-	}
+	while (i--)
+		clk_put(res->clks[i]);
+
 	kfree(res->clks);
 	return ret;
 }
 
-static void simplefb_release_clocks(struct simplefb_resources *res)
+static void simplefb_enable_clocks(struct device *dev, struct simplefb_resources *res)
 {
-	unsigned int i;
+	int ret;
 
-	for (i = 0; i < res->clk_count; ++i) {
-		if (res->clks[i]) {
+	for (unsigned int i = 0; i < res->clk_count; ++i) {
+		ret = clk_prepare_enable(res->clks[i]);
+		if (ret)
+			dev_err(dev, "Error %pe enabling clock %u\n", ERR_PTR(ret), i);
+	}
+}
+
+static void simplefb_release_clocks(struct simplefb_resources *res, bool enabled)
+{
+	for (unsigned int i = 0; i < res->clk_count; ++i) {
+		if (enabled)
 			clk_disable_unprepare(res->clks[i]);
-			clk_put(res->clks[i]);
-		}
+		clk_put(res->clks[i]);
 	}
 	kfree(res->clks);
 }
 #else
-static int simplefb_init_clocks(struct device *dev, struct simplefb_resources *res)
+static int simplefb_get_clocks(struct device *dev, struct simplefb_resources *res)
 {
 	return 0;
 }
-static void simplefb_release_clocks(struct simplefb_resources *res) { }
+static void simplefb_enable_clocks(struct device *dev, struct simplefb_resources *res) { }
+static void simplefb_release_clocks(struct simplefb_resources *res, bool enabled) { }
 #endif
 
 #if defined CONFIG_OF && defined CONFIG_REGULATOR
@@ -123,7 +123,7 @@ static void simplefb_release_clocks(struct simplefb_resources *res) { }
  * the fb probe will not help us much either. So just complain and carry on,
  * and hope that the user actually gets a working fb at the end of things.
  */
-static int simplefb_init_regulators(struct device *dev, struct simplefb_resources *res)
+static int simplefb_get_regulators(struct device *dev, struct simplefb_resources *res)
 {
 	unsigned int count = 0, i = 0;
 	struct regulator *regulator;
@@ -157,20 +157,12 @@ static int simplefb_init_regulators(struct device *dev, struct simplefb_resource
 
 		regulator = regulator_get_optional(dev, name);
 		if (IS_ERR(regulator)) {
-			ret = dev_err_probe(dev, PTR_ERR(regulator),
-					    "getting regulator %s\n", name);
+			dev_err(dev, "Error %pe getting regulator %s\n", regulator, name);
+			ret = PTR_ERR(regulator);
 			if (ret == -EPROBE_DEFER)
 				goto err;
 			continue;
 		}
-
-		ret = regulator_enable(regulator);
-		if (ret) {
-			dev_err_probe(dev, ret, "enabling regulator %s\n", name);
-			regulator_put(regulator);
-			continue;
-		}
-
 		res->regulators[i++] = regulator;
 	}
 	res->regulator_count = i;
@@ -178,35 +170,40 @@ static int simplefb_init_regulators(struct device *dev, struct simplefb_resource
 	return 0;
 
 err:
-	while (i) {
-		--i;
-		if (res->regulators[i]) {
-			regulator_disable(res->regulators[i]);
-			regulator_put(res->regulators[i]);
-		}
-	}
+	while (i--)
+		regulator_put(res->regulators[i]);
+
 	kfree(res->regulators);
 	return ret;
 }
 
-static void simplefb_release_regulators(struct simplefb_resources *res)
+static void simplefb_enable_regulators(struct device *dev, struct simplefb_resources *res)
 {
-	unsigned int i;
+	int ret;
 
-	for (i = 0; i < res->regulator_count; ++i) {
-		if (res->regulators[i]) {
+	for (unsigned int i = 0; i < res->regulator_count; ++i) {
+		ret = regulator_enable(res->regulators[i]);
+		if (ret)
+			dev_err(dev, "Error %pe enabling regulator %u\n", ERR_PTR(ret), i);
+	}
+}
+
+static void simplefb_release_regulators(struct simplefb_resources *res, bool enabled)
+{
+	for (unsigned int i = 0; i < res->regulator_count; ++i) {
+		if (enabled)
 			regulator_disable(res->regulators[i]);
-			regulator_put(res->regulators[i]);
-		}
+		regulator_put(res->regulators[i]);
 	}
 	kfree(res->regulators);
 }
 #else
-static int simplefb_init_regulators(struct device *dev, struct simplefb_resources *res)
+static int simplefb_get_regulators(struct device *dev, struct simplefb_resources *res)
 {
 	return 0;
 }
-static void simplefb_release_regulators(struct simplefb_resources *res) { }
+static void simplefb_enable_regulators(struct device *dev, struct simplefb_resources *res) { }
+static void simplefb_release_regulators(struct simplefb_resources *res, bool enabled) { }
 #endif
 
 #if defined CONFIG_OF && defined CONFIG_PM_GENERIC_DOMAINS
@@ -307,29 +304,32 @@ int simplefb_acquire_resources(struct device *dev, struct simplefb_resources *re
 	if (!dev->of_node)
 		return 0;
 
-	ret = simplefb_init_clocks(dev, res);
+	ret = simplefb_get_clocks(dev, res);
 	if (ret)
 		return ret;
 
-	ret = simplefb_init_regulators(dev, res);
+	ret = simplefb_get_regulators(dev, res);
 	if (ret) {
-		simplefb_release_clocks(res);
+		simplefb_release_clocks(res, false);
 		return ret;
 	}
 
 	ret = simplefb_attach_genpd(dev, res);
 	if (ret) {
-		simplefb_release_regulators(res);
-		simplefb_release_clocks(res);
+		simplefb_release_regulators(res, false);
+		simplefb_release_clocks(res, false);
 		return ret;
 	}
+
+	simplefb_enable_clocks(dev, res);
+	simplefb_enable_regulators(dev, res);
 
 	return 0;
 }
 
 void simplefb_release_resources(struct simplefb_resources *res)
 {
+	simplefb_release_regulators(res, true);
+	simplefb_release_clocks(res, true);
 	simplefb_detach_genpd(res);
-	simplefb_release_regulators(res);
-	simplefb_release_clocks(res);
 }

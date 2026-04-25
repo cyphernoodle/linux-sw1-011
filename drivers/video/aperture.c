@@ -44,7 +44,7 @@
  *		size = resource_size(mem);
  *
  *		ret = aperture_remove_conflicting_devices(base, size, "example");
- *		if (ret)
+ *		if (ret < 0)
  *			return ret;
  *
  *		// Initialize the hardware
@@ -244,10 +244,11 @@ int devm_aperture_acquire_for_platform_device(struct platform_device *pdev,
 }
 EXPORT_SYMBOL(devm_aperture_acquire_for_platform_device);
 
-static void aperture_detach_devices(resource_size_t base, resource_size_t size)
+static int aperture_detach_devices(resource_size_t base, resource_size_t size)
 {
 	resource_size_t end = base + size;
 	struct list_head *pos, *n;
+	int removed = 0;
 
 	mutex_lock(&apertures_lock);
 
@@ -265,9 +266,12 @@ static void aperture_detach_devices(resource_size_t base, resource_size_t size)
 		list_del(&ap->lh);
 
 		ap->detach(dev);
+		removed = 1;
 	}
 
 	mutex_unlock(&apertures_lock);
+
+	return removed;
 }
 
 /**
@@ -279,7 +283,8 @@ static void aperture_detach_devices(resource_size_t base, resource_size_t size)
  * This function removes devices that own apertures within @base and @size.
  *
  * Returns:
- * 0 on success, or a negative errno code otherwise
+ * 1 if conflicting apertures were found and removed, 0 if there were
+ * no conflicting apertures, or a negative errno code on errors
  */
 int aperture_remove_conflicting_devices(resource_size_t base, resource_size_t size,
 					const char *name)
@@ -295,9 +300,7 @@ int aperture_remove_conflicting_devices(resource_size_t base, resource_size_t si
 	 */
 	sysfb_disable(NULL);
 
-	aperture_detach_devices(base, size);
-
-	return 0;
+	return aperture_detach_devices(base, size);
 }
 EXPORT_SYMBOL(aperture_remove_conflicting_devices);
 
