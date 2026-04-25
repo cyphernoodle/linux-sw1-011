@@ -20,9 +20,9 @@
 			dp3-vdda-phy-supply = <&vreg_l3j_0p8>;
 			dp3-vdda-pll-supply = <&vreg_l2j_1p2>;
 
-			clocks = <&gcc GCC_DISP_HF_AXI_CLK>,
+			clocks = <&dispcc DISP_CC_MDSS_AHB_CLK>,
+				 <&gcc GCC_DISP_HF_AXI_CLK>,
 				 <&dispcc DISP_CC_MDSS_MDP_CLK>,
-				 <&dispcc DISP_CC_MDSS_AHB_CLK>,
 				 <&dispcc DISP_CC_MDSS_DPTX3_AUX_CLK>,
 				 <&dispcc DISP_CC_MDSS_DPTX3_LINK_CLK>,
 				 <&dispcc DISP_CC_MDSS_DPTX3_LINK_INTF_CLK>,
