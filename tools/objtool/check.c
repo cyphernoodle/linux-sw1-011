@@ -1307,18 +1307,19 @@ static const char *uaccess_safe_builtin[] = {
 
 static void add_uaccess_safe(struct objtool_file *file)
 {
-	struct symbol *func;
 	const char **name;
 
 	if (!opts.uaccess)
 		return;
 
-	for (name = uaccess_safe_builtin; *name; name++) {
-		func = find_symbol_by_name(file->elf, *name);
-		if (!func)
-			continue;
-
-		func->uaccess_safe = true;
+	struct symbol *sym;
+	for_each_sym(file->elf, sym) {
+		for (name = uaccess_safe_builtin; *name; name++) {
+			if (!strcmp(sym->name, *name)) {
+				sym->uaccess_safe = true;
+				break;
+			}
+		}
 	}
 }
 
@@ -3436,9 +3437,18 @@ static bool insn_cfi_match(struct instruction *insn, struct cfi_state *cfi2)
 
 static inline bool func_uaccess_safe(struct symbol *func)
 {
-	if (func)
-		return func->uaccess_safe;
+	if (func) {
+		if (func->uaccess_safe)
+			return true;
 
+		if (func->name) {
+			const char **name;
+			for (name = uaccess_safe_builtin; *name; name++) {
+				if (!strcmp(func->name, *name))
+					return true;
+			}
+		}
+	}
 	return false;
 }
 

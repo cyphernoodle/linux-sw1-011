@@ -633,6 +633,13 @@ void folio_putback_lru(struct folio *folio);
 extern void reclaim_throttle(pg_data_t *pgdat, enum vmscan_throttle_state reason);
 int user_proactive_reclaim(char *buf,
 			   struct mem_cgroup *memcg, pg_data_t *pgdat);
+int vm_workingset_protection_update_handler(const struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos);
+
+extern bool sysctl_workingset_protection;
+extern u8 sysctl_anon_min_ratio;
+extern u8 sysctl_clean_low_ratio;
+extern u8 sysctl_clean_min_ratio;
 
 /*
  * in mm/rmap.c:

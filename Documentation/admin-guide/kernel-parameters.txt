@@ -1264,11 +1264,12 @@ Kernel parameters
 			deferred probe to give up waiting on dependencies to
 			probe. Only specific dependencies (subsystems or
 			drivers) that have opted in will be ignored. A timeout
-			of 0 will timeout at the end of initcalls. If the time
-			out hasn't expired, it'll be restarted by each
+			of 0 will timeout at the end of initcalls; a negative
+			value is treated as an infinite timeout value. If the
+			timeout hasn't expired, it'll be restarted by each
 			successful driver registration. This option will also
 			dump out devices still on the deferred probe list after
-			retrying.
+			retrying. Set to -1 to wait indefinitely.
 
 	delayacct	[KNL] Enable per-task delay accounting
 
@@ -2531,6 +2532,9 @@ Kernel parameters
 			disable
 			  Do not enable intel_pstate as the default
 			  scaling driver for the supported processors
+			enable
+			  Enable intel_pstate in-case "disable" was passed
+			  previously in the kernel boot parameters
                         active
                           Use intel_pstate driver to bypass the scaling
                           governors layer of cpufreq and provides it own
@@ -5114,6 +5118,15 @@ Kernel parameters
 		nomsi		[MSI] If the PCI_MSI kernel config parameter is
 				enabled, this kernel boot option can be used to
 				disable the use of MSI interrupts system-wide.
+		pcie_acs_override =
+					[PCIE] Override missing PCIe ACS support for:
+				downstream
+					All downstream ports - full ACS capabilities
+				multfunction
+					All multifunction devices - multifunction ACS subset
+				id:nnnn:nnnn
+					Specfic device - full ACS capabilities
+					Specified as vid:did (vendor/device ID) in hex
 		noioapicquirk	[APIC] Disable all boot interrupt quirks.
 				Safety option to keep boot IRQs enabled. This
 				should never be necessary.
