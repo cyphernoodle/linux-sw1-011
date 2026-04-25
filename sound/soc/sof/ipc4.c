@@ -590,6 +590,8 @@ out:
 
 	kfree(tx_payload_for_get);
 
+	kfree(tx_payload_for_get);
+
 	return ret;
 }
 

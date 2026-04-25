@@ -1301,24 +1301,25 @@ static const char *uaccess_safe_builtin[] = {
 	"copy_mc_enhanced_fast_string",
 	"rep_stos_alternative",
 	"rep_movs_alternative",
-	"__copy_user_nocache",
+	"copy_to_nontemporal",
 	NULL
 };
 
 static void add_uaccess_safe(struct objtool_file *file)
 {
-	struct symbol *func;
 	const char **name;
 
 	if (!opts.uaccess)
 		return;
 
-	for (name = uaccess_safe_builtin; *name; name++) {
-		func = find_symbol_by_name(file->elf, *name);
-		if (!func)
-			continue;
-
-		func->uaccess_safe = true;
+	struct symbol *sym;
+	for_each_sym(file->elf, sym) {
+		for (name = uaccess_safe_builtin; *name; name++) {
+			if (!strcmp(sym->name, *name)) {
+				sym->uaccess_safe = true;
+				break;
+			}
+		}
 	}
 }
 
@@ -3436,9 +3437,18 @@ static bool insn_cfi_match(struct instruction *insn, struct cfi_state *cfi2)
 
 static inline bool func_uaccess_safe(struct symbol *func)
 {
-	if (func)
-		return func->uaccess_safe;
+	if (func) {
+		if (func->uaccess_safe)
+			return true;
 
+		if (func->name) {
+			const char **name;
+			for (name = uaccess_safe_builtin; *name; name++) {
+				if (!strcmp(func->name, *name))
+					return true;
+			}
+		}
+	}
 	return false;
 }
 
@@ -4306,8 +4316,8 @@ static int validate_retpoline(struct objtool_file *file)
 	list_for_each_entry(insn, &file->retpoline_call_list, call_node) {
 		struct symbol *sym = insn->sym;
 
-		if (sym && (sym->type == STT_NOTYPE ||
-			    sym->type == STT_FUNC) && !sym->nocfi) {
+		if (sym && (is_notype_sym(sym) ||
+			    is_func_sym(sym)) && !sym->nocfi) {
 			struct instruction *prev =
 				prev_insn_same_sym(file, insn);
 

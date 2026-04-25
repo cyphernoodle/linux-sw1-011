@@ -544,11 +544,24 @@ static const struct intel_pinctrl_soc_data southeast_soc_data = {
 	.ncommunities = ARRAY_SIZE(southeast_communities),
 };
 
+static const struct intel_pinctrl_soc_data southeast2_soc_data = {
+	.uid = "5",
+	.pins = southeast_pins,
+	.npins = ARRAY_SIZE(southeast_pins),
+	.groups = southeast_groups,
+	.ngroups = ARRAY_SIZE(southeast_groups),
+	.functions = southeast_functions,
+	.nfunctions = ARRAY_SIZE(southeast_functions),
+	.communities = southeast_communities,
+	.ncommunities = ARRAY_SIZE(southeast_communities),
+};
+
 static const struct intel_pinctrl_soc_data *chv_soc_data[] = {
 	&southwest_soc_data,
 	&north_soc_data,
 	&east_soc_data,
 	&southeast_soc_data,
+	&southeast2_soc_data,
 	NULL
 };
 

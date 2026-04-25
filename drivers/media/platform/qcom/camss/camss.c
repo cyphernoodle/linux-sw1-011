@@ -4472,6 +4472,7 @@ static int camss_init_subdevices(struct camss *camss)
 {
 	struct platform_device *pdev = to_platform_device(camss->dev);
 	const struct camss_resources *res = camss->res;
+	struct device_node *phy_np;
 	unsigned int i;
 	int ret;
 
