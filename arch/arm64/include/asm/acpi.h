@@ -76,10 +76,10 @@ typedef u64 phys_cpuid_t;
 #define PHYS_CPUID_INVALID INVALID_HWID
 
 #define acpi_strict 1	/* No out-of-spec workarounds on ARM64 */
-#define acpi_parse_only 0	/* No parse only support on ARM64 */
 extern int acpi_disabled;
 extern int acpi_noirq;
 extern int acpi_pci_disabled;
+extern int acpi_parse_only;
 
 static inline void disable_acpi(void)
 {
