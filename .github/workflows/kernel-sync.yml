@@ -1,0 +1,81 @@
+name: Kernel Mirror Sync & Automerge
+
+on:
+  schedule:
+    # Se ejecuta cada viernes a las 00:00 UTC
+    - cron: '0 0 * * 5'
+  workflow_dispatch: # Permite ejecución manual para pruebas
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync-upstreams:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 
+
+      - name: Configure Git Identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync Mirror Branches
+        run: |
+          # --- 1. Sincronizar torvalds-base (Mirror de Torvalds master) ---
+          echo "Sincronizando con Torvalds..."
+          git remote add torvalds https://github.com/torvalds/linux.git
+          git fetch torvalds master
+          git checkout torvalds-base
+          git reset --hard torvalds/master
+          git push origin torvalds-base --force
+
+          # --- 2. Sincronizar sunxi-base (Mirror de Hans main) ---
+          echo "Sincronizando con Hans de Goede (main)..."
+          git remote add jwr-sunxi https://github.com/jwrdegoede/linux-sunxi.git
+          git fetch jwr-sunxi main
+          git checkout sunxi-base
+          git reset --hard jwr-sunxi/main
+          git push origin sunxi-base --force
+
+      - name: Create and Auto-merge PRs to Acer-cachyos-Patches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Lista de tus ramas espejo que deben ir a Upstream-Acer
+          BRANCHES=("torvalds-base" "sunxi-base")
+
+          for branch in "${BRANCHES[@]}"; do
+            echo "Comparando $branch con Acer-cachyos-Patches..."
+            
+            git checkout Acer-cachyos-Patches
+            git fetch origin
+            
+            # Verificamos si la rama espejo tiene commits que no están en Upstream-Acer
+            if [ $(git rev-list --count Acer-cachyos-Patches..origin/$branch) -eq 0 ]; then
+              echo "No hay cambios nuevos en $branch. Saltando."
+              continue
+            fi
+
+            echo "Creando Pull Request para $branch..."
+            PR_URL=$(gh pr create \
+              --base Acer-cachyos-Patches \
+              --head $branch \
+              --title "Sync: $branch a Acer-cachyos-Patches" \
+              --body "Actualización automática del kernel original. Mezcla automática si no hay conflictos." \
+              2>/dev/null || echo "exists")
+
+            if [ "$PR_URL" = "exists" ]; then
+              PR_URL=$(gh pr list --head $branch --base Acer-cachyos-Patches --json url --jq '.[0].url')
+            fi
+
+            if [ -n "$PR_URL" ] && [ "$PR_URL" != "null" ]; then
+              echo "Intentando merge automático en $PR_URL..."
+              # --merge crea un commit de merge. --auto activa el automerge de GitHub.
+              gh pr merge $PR_URL --merge --auto || echo "⚠️ Conflictos en $branch. Detenido para revisión manual."
+            fi
+          done

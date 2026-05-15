@@ -2253,6 +2253,10 @@ static void acpi_default_enumeration(struct acpi_device *device)
 					     ACPI_RECONFIG_DEVICE_ADD, device);
 		return;
 	}
+
+	if (acpi_parse_only)
+		return;
+
 	if (match_string(acpi_system_dev_ids, -1, acpi_device_hid(device)) >= 0) {
 		struct acpi_scan_system_dev *sd;
 

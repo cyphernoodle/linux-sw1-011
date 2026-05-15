@@ -53,6 +53,11 @@ static int slot_pwrctrl_power_off(struct pci_pwrctrl *pwrctrl)
 		return 0;
 	}
 
+	if (slot->pwrseq) {
+		pwrseq_power_off(slot->pwrseq);
+		return;
+	}
+
 	regulator_bulk_disable(slot->num_supplies, slot->supplies);
 	clk_disable_unprepare(slot->clk);
 

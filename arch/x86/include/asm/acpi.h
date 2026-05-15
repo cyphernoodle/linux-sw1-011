@@ -25,6 +25,7 @@
 #endif
 
 #ifdef CONFIG_ACPI
+#define acpi_parse_only 0	/* No parse only support on x86 */
 extern int acpi_lapic;
 extern int acpi_ioapic;
 extern int acpi_noirq;

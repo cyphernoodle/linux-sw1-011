@@ -67,7 +67,11 @@
 
 bool intel_display_driver_probe_defer(struct pci_dev *pdev)
 {
+	static const char * const internal_panel_connector_names[] = {
+		"eDP-1",
+	};
 	struct drm_privacy_screen *privacy_screen;
+	int i;
 
 	/*
 	 * apple-gmux is needed on dual GPU MacBook Pro
@@ -77,11 +81,14 @@ bool intel_display_driver_probe_defer(struct pci_dev *pdev)
 		return true;
 
 	/* If the LCD panel has a privacy-screen, wait for it */
-	privacy_screen = drm_privacy_screen_get(&pdev->dev, NULL);
-	if (IS_ERR(privacy_screen) && PTR_ERR(privacy_screen) == -EPROBE_DEFER)
-		return true;
+	for (i = 0; i < ARRAY_SIZE(internal_panel_connector_names); i++) {
+		privacy_screen = drm_privacy_screen_get(&pdev->dev,
+							internal_panel_connector_names[i]);
+		if (IS_ERR(privacy_screen) && PTR_ERR(privacy_screen) == -EPROBE_DEFER)
+			return true;
 
-	drm_privacy_screen_put(privacy_screen);
+		drm_privacy_screen_put(privacy_screen);
+	}
 
 	return false;
 }
@@ -210,6 +217,7 @@ int intel_display_driver_probe_noirq(struct intel_display *display)
 	intel_bios_init(display);
 
 	intel_psr_dc5_dc6_wa_init(display);
+	intel_init_quirks(display);
 
 	/* FIXME: completely on the wrong abstraction layer */
 	ret = intel_power_domains_init(display);
@@ -281,8 +289,6 @@ int intel_display_driver_probe_noirq(struct intel_display *display)
 	ret = intel_pmdemand_init(display);
 	if (ret)
 		goto cleanup_wq_unordered;
-
-	intel_init_quirks(display);
 
 	intel_fbc_init(display);
 

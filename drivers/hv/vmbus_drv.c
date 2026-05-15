@@ -3027,6 +3027,10 @@ static void __exit vmbus_exit(void)
 		smpboot_unregister_percpu_thread(&vmbus_irq_threads);
 		vmbus_irq_initialized = false;
 	}
+	if (IS_ENABLED(CONFIG_PREEMPT_RT) && vmbus_irq_initialized) {
+		smpboot_unregister_percpu_thread(&vmbus_irq_threads);
+		vmbus_irq_initialized = false;
+	}
 	for_each_online_cpu(cpu) {
 		struct hv_per_cpu_context *hv_cpu
 			= per_cpu_ptr(hv_context.cpu_context, cpu);

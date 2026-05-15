@@ -59,8 +59,8 @@
 #define KSYM_FUNC(name)		name
 #endif
 
-#define KSYMTAB_FUNC(name, ns)	__KSYMTAB(name, KSYM_FUNC(name), ns)
-#define KSYMTAB_DATA(name, ns)	__KSYMTAB(name, name, ns)
+#define KSYMTAB_FUNC(name, gpl, ns)	__KSYMTAB(name, KSYM_FUNC(name), ns)
+#define KSYMTAB_DATA(name, gpl, ns)	__KSYMTAB(name, name, ns)
 
 #define SYMBOL_CRC(sym, crc)					\
 	asm("	.section \"___kcrctab+" #sym "\",\"a\""	"\n"	\

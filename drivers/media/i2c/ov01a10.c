@@ -161,7 +161,6 @@ static const struct reg_sequence ov01a10_global_setting[] = {
 	{0x3815, 0x01},
 	{0x3816, 0x01},
 	{0x3817, 0x01},
-	{0x3822, 0x13},
 	{0x3832, 0x28},
 	{0x3833, 0x10},
 	{0x3b00, 0x00},
@@ -186,7 +185,6 @@ static const struct reg_sequence ov01a10_global_setting[] = {
 	{0x4800, 0x64},
 	{0x481f, 0x34},
 	{0x4825, 0x33},
-	{0x4837, 0x11},
 	{0x4881, 0x40},
 	{0x4883, 0x01},
 	{0x4890, 0x00},
@@ -201,6 +199,17 @@ static const struct reg_sequence ov01a10_global_setting[] = {
 	{0x5004, 0x00},
 	{0x5080, 0x40},
 	{0x0325, 0xc2},
+};
+
+static const struct reg_sequence ov01a10_regs[] = {
+	{0x3822, 0x13},
+	{0x4837, 0x11},
+};
+
+static const struct reg_sequence ov01a1s_regs[] = {
+	{0x3822, 0x03},
+	{0x4837, 0x14},
+	{0x373d, 0x24},
 };
 
 static const char * const ov01a10_test_pattern_menu[] = {
@@ -236,6 +245,8 @@ static const char * const ov01a10_supply_names[] = {
 
 struct ov01a10_sensor_cfg {
 	const char *model;
+	const struct reg_sequence *regs;
+	int regs_len;
 	u32 bus_fmt;
 	int pattern_size;
 	int border_size;
@@ -550,6 +561,7 @@ static int ov01a10_set_mode(struct ov01a10 *ov01a10)
 
 static int ov01a10_start_streaming(struct ov01a10 *ov01a10)
 {
+	const struct ov01a10_sensor_cfg *cfg = ov01a10->cfg;
 	const struct ov01a10_link_freq_config *freq_cfg;
 	int ret;
 
@@ -565,6 +577,12 @@ static int ov01a10_start_streaming(struct ov01a10 *ov01a10)
 				     ARRAY_SIZE(ov01a10_global_setting));
 	if (ret) {
 		dev_err(ov01a10->dev, "failed to initialize sensor\n");
+		return ret;
+	}
+
+	ret = regmap_multi_reg_write(ov01a10->regmap, cfg->regs, cfg->regs_len);
+	if (ret) {
+		dev_err(ov01a10->dev, "failed to write sensor regs\n");
 		return ret;
 	}
 
@@ -1094,6 +1112,8 @@ static DEFINE_RUNTIME_DEV_PM_OPS(ov01a10_pm_ops, ov01a10_power_off,
  */
 static const struct ov01a10_sensor_cfg ov01a10_cfg = {
 	.model = "ov01a10",
+	.regs = ov01a10_regs,
+	.regs_len = ARRAY_SIZE(ov01a10_regs),
 	.bus_fmt = MEDIA_BUS_FMT_SBGGR10_1X10,
 	.pattern_size = 2, /* 2x2 */
 	.border_size = 2,
@@ -1104,15 +1124,41 @@ static const struct ov01a10_sensor_cfg ov01a10_cfg = {
 
 static const struct ov01a10_sensor_cfg ov01a1b_cfg = {
 	.model = "ov01a1b",
+	.regs = ov01a10_regs,
+	.regs_len = ARRAY_SIZE(ov01a10_regs),
 	.bus_fmt = MEDIA_BUS_FMT_Y10_1X10,
 	.pattern_size = 2, /* Keep coordinates aligned to a multiple of 2 */
 	.border_size = 0,
 	.format1_base_val = 0xa0,
 };
 
+/*
+ * The native ov01a1s bayer_pattern is GRGB-IGIG-GBGR-IGIG but Intel's
+ * proprietary IPU6 userspace stack expects IGIG-GBGR-IGIG-GRGB. So we
+ * generate this by shifting the crop window-y coordinate by 1 when
+ * vflip is *disabled*.
+ */
+static const struct ov01a10_sensor_cfg ov01a1s_cfg = {
+	.model = "ov01a1s",
+	.regs = ov01a1s_regs,
+	.regs_len = ARRAY_SIZE(ov01a1s_regs),
+	/*
+	 * FIXME this obviously is wrong, this needs to be changed to
+	 * MEDIA_BUS_FMT_RAW10_1x10 + reporting the proper bayer-order through
+	 * a v4l2-control once the sensor internal pads series has landed.
+	 */
+	.bus_fmt = MEDIA_BUS_FMT_SGRBG10_1X10, /* really IGIG-GBGR-IGIG-GRGB */
+	.pattern_size = 4, /* 4x4 */
+	.border_size = 4,
+	.format1_base_val = 0x80,
+	.invert_hflip_shift = false,
+	.invert_vflip_shift = true,
+};
+
 static const struct acpi_device_id ov01a10_acpi_ids[] = {
 	{ "OVTI01A0", (uintptr_t)&ov01a10_cfg },
 	{ "OVTI01AB", (uintptr_t)&ov01a1b_cfg },
+	{ "OVTI01AS", (uintptr_t)&ov01a1s_cfg },
 	{ }
 };
 
