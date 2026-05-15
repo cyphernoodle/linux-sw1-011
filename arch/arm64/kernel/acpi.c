@@ -43,10 +43,13 @@ EXPORT_SYMBOL(acpi_disabled);
 int acpi_pci_disabled = 1;	/* skip ACPI PCI scan and IRQ initialization */
 EXPORT_SYMBOL(acpi_pci_disabled);
 
+int acpi_parse_only = 0;	/* skip parsing tables when ACPI is disabled */
+
 static bool param_acpi_off __initdata;
 static bool param_acpi_on __initdata;
 static bool param_acpi_force __initdata;
 static bool param_acpi_nospcr __initdata;
+static bool param_acpi_parse_only __initdata;
 
 static int __init parse_acpi(char *arg)
 {
@@ -62,6 +65,8 @@ static int __init parse_acpi(char *arg)
 		param_acpi_force = true;
 	else if (strcmp(arg, "nospcr") == 0) /* disable SPCR as default console */
 		param_acpi_nospcr = true;
+	else if (strcmp(arg, "parseonly") == 0) /* parse but do not use ACPI tables */
+		param_acpi_parse_only = true;
 	else
 		return -EINVAL;	/* Core will print when we return error */
 
@@ -205,7 +210,7 @@ void __init acpi_boot_table_init(void)
 	 *   and ACPI has not been [force] enabled (acpi=on|force)
 	 */
 	if (param_acpi_off ||
-	    (!param_acpi_on && !param_acpi_force && !dt_is_stub()))
+	    (!param_acpi_on && !param_acpi_force && !param_acpi_parse_only && !dt_is_stub()))
 		goto done;
 
 	/*
@@ -225,6 +230,9 @@ void __init acpi_boot_table_init(void)
 		pr_err("Failed to init ACPI tables\n");
 		if (!param_acpi_force)
 			disable_acpi();
+	} else if (param_acpi_parse_only) {
+		acpi_parse_only = 1;
+		disable_acpi();
 	}
 
 done:
@@ -252,10 +260,10 @@ done:
 		 */
 		acpi_parse_spcr(earlycon_acpi_spcr_enable,
 			!param_acpi_nospcr);
-
-		if (IS_ENABLED(CONFIG_ACPI_BGRT))
-			acpi_table_parse(ACPI_SIG_BGRT, acpi_parse_bgrt);
 	}
+
+	if ((!acpi_disabled || acpi_parse_only) && IS_ENABLED(CONFIG_ACPI_BGRT))
+		acpi_table_parse(ACPI_SIG_BGRT, acpi_parse_bgrt);
 }
 
 static pgprot_t __acpi_get_writethrough_mem_attribute(void)
