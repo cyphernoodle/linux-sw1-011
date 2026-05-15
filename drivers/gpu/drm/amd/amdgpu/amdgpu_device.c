@@ -1334,18 +1334,15 @@ static bool amdgpu_device_aspm_support_quirk(struct amdgpu_device *adev)
 #if IS_ENABLED(CONFIG_X86)
 	struct cpuinfo_x86 *c = &cpu_data(0);
 
-	if (!(amdgpu_ip_version(adev, GC_HWIP, 0) == IP_VERSION(12, 0, 0) ||
-		  amdgpu_ip_version(adev, GC_HWIP, 0) == IP_VERSION(12, 0, 1)))
-		return false;
-
-	if (c->x86 == 6 &&
-		adev->pm.pcie_gen_mask & CAIL_PCIE_LINK_SPEED_SUPPORT_GEN5) {
+	if (c->x86_vendor == X86_VENDOR_INTEL) {
 		switch (c->x86_model) {
 		case VFM_MODEL(INTEL_ALDERLAKE):
 		case VFM_MODEL(INTEL_ALDERLAKE_L):
 		case VFM_MODEL(INTEL_RAPTORLAKE):
 		case VFM_MODEL(INTEL_RAPTORLAKE_P):
 		case VFM_MODEL(INTEL_RAPTORLAKE_S):
+		case VFM_MODEL(INTEL_TIGERLAKE):
+		case VFM_MODEL(INTEL_TIGERLAKE_L):
 			return true;
 		default:
 			return false;
@@ -2842,8 +2839,12 @@ static int amdgpu_device_ip_fini_early(struct amdgpu_device *adev)
 	 * that checks whether the PSP is running. A solution for those issues
 	 * in the APU is to trigger a GPU reset, but this should be done during
 	 * the unload phase to avoid adding boot latency and screen flicker.
+	 * GFX V11 has GC block as default off IP. Every time AMDGPU driver sends
+	 * a request to PMFW to unload MP1, PMFW will put GC in reset and power down
+	 * the voltage. Hence, skipping reset for APUs with GFX V11 or later.
 	 */
-	if ((adev->flags & AMD_IS_APU) && !adev->gmc.is_app_apu) {
+	if ((adev->flags & AMD_IS_APU) && !adev->gmc.is_app_apu &&
+		amdgpu_ip_version(adev, GC_HWIP, 0) < IP_VERSION(11, 0, 0)) {
 		r = amdgpu_asic_reset(adev);
 		if (r)
 			dev_err(adev->dev, "asic reset on %s failed\n", __func__);
@@ -5518,8 +5519,6 @@ static void amdgpu_device_recovery_prepare(struct amdgpu_device *adev,
 			list_add_tail(&tmp_adev->reset_list, device_list);
 			if (adev->shutdown)
 				tmp_adev->shutdown = true;
-			if (amdgpu_reset_in_dpc(adev))
-				tmp_adev->pcie_reset_ctx.in_link_reset = true;
 		}
 		if (!list_is_first(&adev->reset_list, device_list))
 			list_rotate_to_front(&adev->reset_list, device_list);
@@ -6291,6 +6290,9 @@ pci_ers_result_t amdgpu_pci_error_detected(struct pci_dev *pdev, pci_channel_sta
 			amdgpu_reset_set_dpc_status(adev, true);
 
 			mutex_lock(&hive->hive_lock);
+		} else {
+			if (amdgpu_device_bus_status_check(adev))
+				amdgpu_reset_set_dpc_status(adev, true);
 		}
 		memset(&reset_context, 0, sizeof(reset_context));
 		INIT_LIST_HEAD(&device_list);
@@ -6411,6 +6413,7 @@ pci_ers_result_t amdgpu_pci_slot_reset(struct pci_dev *pdev)
 		list_for_each_entry(tmp_adev, &hive->device_list, gmc.xgmi.head)
 			tmp_adev->pcie_reset_ctx.in_link_reset = true;
 	} else {
+		adev->pcie_reset_ctx.in_link_reset = true;
 		set_bit(AMDGPU_SKIP_HW_RESET, &reset_context.flags);
 	}
 
@@ -6467,9 +6470,10 @@ void amdgpu_pci_resume(struct pci_dev *pdev)
 			tmp_adev->pcie_reset_ctx.in_link_reset = false;
 			list_add_tail(&tmp_adev->reset_list, &device_list);
 		}
-	} else
+	} else {
+		adev->pcie_reset_ctx.in_link_reset = false;
 		list_add_tail(&adev->reset_list, &device_list);
-
+	}
 	amdgpu_device_sched_resume(&device_list, NULL, NULL);
 	amdgpu_device_gpu_resume(adev, &device_list, false);
 	amdgpu_device_recovery_put_reset_lock(adev, &device_list);

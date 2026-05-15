@@ -188,10 +188,10 @@ int adc5_gen3_poll_wait_hs(struct adc5_device_data *adc,
 			   unsigned int sdam_index)
 {
 	u8 conv_req = ADC5_GEN3_CONV_REQ_REQ;
-	int ret;
+	int ret, count;
 	u8 status = 0;
 
-	for (int count = 0; count < ADC5_GEN3_HS_RETRY_COUNT; count++) {
+	for (count = 0; count < ADC5_GEN3_HS_RETRY_COUNT; count++) {
 		ret = adc5_gen3_read(adc, sdam_index, ADC5_GEN3_HS, &status, sizeof(status));
 		if (ret)
 			return ret;
@@ -347,9 +347,9 @@ static int adc5_gen3_fwnode_xlate(struct iio_dev *indio_dev,
 				  const struct fwnode_reference_args *iiospec)
 {
 	struct adc5_chip *adc = iio_priv(indio_dev);
-	int v_channel;
+	int i, v_channel;
 
-	for (int i = 0; i < adc->nchannels; i++) {
+	for (i = 0; i < adc->nchannels; i++) {
 		v_channel = ADC5_GEN3_V_CHAN(adc->chan_props[i].common_props);
 		if (v_channel == iiospec->args[0])
 			return i;
@@ -638,7 +638,7 @@ static void adc5_gen3_aux_device_release(struct device *dev) {}
 static int adc5_gen3_add_aux_tm_device(struct adc5_chip *adc)
 {
 	struct tm5_aux_dev_wrapper *aux_device;
-	int ret, i_tm = 0;
+	int i, ret, i_tm = 0;
 
 	aux_device = devm_kzalloc(adc->dev, sizeof(*aux_device), GFP_KERNEL);
 	if (!aux_device)
@@ -656,7 +656,7 @@ static int adc5_gen3_add_aux_tm_device(struct adc5_chip *adc)
 
 	aux_device->dev_data = &adc->dev_data;
 
-	for (int i = 0; i < adc->nchannels; i++) {
+	for (i = 0; i < adc->nchannels; i++) {
 		if (!adc->chan_props[i].adc_tm)
 			continue;
 		aux_device->tm_props[i_tm] = adc->chan_props[i].common_props;
@@ -757,7 +757,7 @@ static int adc5_gen3_probe(struct platform_device *pdev)
 	struct iio_dev *indio_dev;
 	struct adc5_chip *adc;
 	struct regmap *regmap;
-	int ret;
+	int ret, i;
 	u32 *reg;
 
 	regmap = dev_get_regmap(dev->parent, NULL);
@@ -771,12 +771,6 @@ static int adc5_gen3_probe(struct platform_device *pdev)
 	adc = iio_priv(indio_dev);
 	adc->dev_data.regmap = regmap;
 	adc->dev = dev;
-
-	platform_set_drvdata(pdev, indio_dev);
-	init_completion(&adc->complete);
-	ret = devm_mutex_init(dev, &adc->lock);
-	if (ret)
-		return ret;
 
 	ret = device_property_count_u32(dev, "reg");
 	if (ret < 0)
@@ -801,7 +795,13 @@ static int adc5_gen3_probe(struct platform_device *pdev)
 	if (!adc->dev_data.base)
 		return -ENOMEM;
 
-	for (int i = 0; i < adc->dev_data.num_sdams; i++) {
+	platform_set_drvdata(pdev, indio_dev);
+	init_completion(&adc->complete);
+	ret = devm_mutex_init(dev, &adc->lock);
+	if (ret)
+		return ret;
+
+	for (i = 0; i < adc->dev_data.num_sdams; i++) {
 		adc->dev_data.base[i].base_addr = reg[i];
 
 		ret = platform_get_irq(pdev, i);

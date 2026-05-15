@@ -321,18 +321,6 @@ EXPORT_SYMBOL_GPL(agp_remove_bridge);
 int agp_off;
 EXPORT_SYMBOL(agp_off);
 
-static int __init agp_init(void)
-{
-	if (!agp_off)
-		printk(KERN_INFO "Linux agpgart interface v%d.%d\n",
-			AGPGART_VERSION_MAJOR, AGPGART_VERSION_MINOR);
-	return 0;
-}
-
-static void __exit agp_exit(void)
-{
-}
-
 #ifndef MODULE
 static __init int agp_setup(char *s)
 {
@@ -347,7 +335,3 @@ MODULE_AUTHOR("Dave Jones, Jeff Hartmann");
 MODULE_DESCRIPTION("AGP GART driver");
 MODULE_LICENSE("GPL and additional rights");
 MODULE_ALIAS_MISCDEV(AGPGART_MINOR);
-
-module_init(agp_init);
-module_exit(agp_exit);
-
