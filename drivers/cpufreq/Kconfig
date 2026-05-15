@@ -163,7 +163,6 @@ config CPU_FREQ_GOV_ONDEMAND
 
 config CPU_FREQ_GOV_CONSERVATIVE
 	tristate "'conservative' cpufreq governor"
-	depends on CPU_FREQ
 	select CPU_FREQ_GOV_COMMON
 	help
 	  'conservative' - this driver is rather similar to the 'ondemand'
@@ -188,7 +187,7 @@ config CPU_FREQ_GOV_CONSERVATIVE
 
 config CPU_FREQ_GOV_SCHEDUTIL
 	bool "'schedutil' cpufreq policy governor"
-	depends on CPU_FREQ && SMP
+	depends on SMP
 	select CPU_FREQ_GOV_ATTR_SET
 	select IRQ_WORK
 	help
@@ -202,6 +201,30 @@ config CPU_FREQ_GOV_SCHEDUTIL
 	  both cases.
 
 	  If in doubt, say N.
+
+config CPU_FREQ_GOV_REFLEX
+	tristate "'reflex' cpufreq policy governor"
+	default m
+	depends on CPU_FREQ && SMP && CPU_FREQ_GOV_SCHEDUTIL
+	select CPU_FREQ_GOV_ATTR_SET
+	select IRQ_WORK
+	help
+	  This governor combines interactive-style fast ramp-up with
+	  schedutil's scheduler utilization tracking.  It uses EWMA smoothing
+	  and trend-based load prediction for proactive frequency scaling.
+
+	  When a CPU transitions from idle to busy, the governor instantly
+	  jumps to a configurable "hispeed" frequency (like the old
+	  interactive governor), then proportionally scales based on
+	  scheduler utilization data (like schedutil).
+
+	  Numerous sysfs tunables allow fine-grained control over the
+	  ramp-up behaviour, EWMA parameters, and idle thresholds.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called cpufreq_reflex.
+
+	  If in doubt, say M.
 
 comment "CPU frequency scaling drivers"
 
@@ -365,6 +388,6 @@ config ACPI_CPPC_CPUFREQ_FIE
 
 	  If in doubt, say N.
 
-endif
+endif # CPU_FREQ
 
 endmenu

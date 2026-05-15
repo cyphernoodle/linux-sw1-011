@@ -13,6 +13,7 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_fbdev_ttm.h>
 #include <drm/drm_gem_framebuffer_helper.h>
+#include <drm/drm_gem_ttm_helper.h>
 #include <drm/drm_ioctl.h>
 #include <drm/drm_modeset_helper.h>
 #include <drm/drm_print.h>
@@ -45,7 +46,7 @@ static const struct drm_driver lsdc_drm_driver = {
 
 	.debugfs_init = lsdc_debugfs_init,
 	.dumb_create = lsdc_dumb_create,
-	.dumb_map_offset = lsdc_dumb_map_offset,
+	.dumb_map_offset = drm_gem_ttm_dumb_map_offset,
 	.gem_prime_import_sg_table = lsdc_prime_import_sg_table,
 	DRM_FBDEV_TTM_DRIVER_OPS,
 };
@@ -217,7 +218,7 @@ lsdc_create_device(struct pci_dev *pdev,
 	ret = aperture_remove_conflicting_devices(ldev->vram_base,
 						  ldev->vram_size,
 						  driver->name);
-	if (ret) {
+	if (ret < 0) {
 		drm_err(ddev, "Remove firmware framebuffers failed: %d\n", ret);
 		return ERR_PTR(ret);
 	}
