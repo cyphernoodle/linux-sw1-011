@@ -43,10 +43,19 @@ EXPORT_SYMBOL(acpi_disabled);
 int acpi_pci_disabled = 1;	/* skip ACPI PCI scan and IRQ initialization */
 EXPORT_SYMBOL(acpi_pci_disabled);
 
-static bool param_acpi_off __initdata;
-static bool param_acpi_on __initdata;
-static bool param_acpi_force __initdata;
+int acpi_dt_hybrid;		/* disable ACPI-DT hybrid mode */
+
+enum acpi_mode_t {
+	acpi_mode_unset,
+	acpi_mode_off,
+	acpi_mode_on,
+	acpi_mode_force,
+	acpi_mode_hybrid,
+};
+
+static enum acpi_mode_t param_acpi_mode __initdata;
 static bool param_acpi_nospcr __initdata;
+static bool param_acpi_parse_only __initdata;
 
 static int __init parse_acpi(char *arg)
 {
@@ -55,13 +64,17 @@ static int __init parse_acpi(char *arg)
 
 	/* "acpi=off" disables both ACPI table parsing and interpreter */
 	if (strcmp(arg, "off") == 0)
-		param_acpi_off = true;
+		param_acpi_mode = acpi_mode_off;
 	else if (strcmp(arg, "on") == 0) /* prefer ACPI over DT */
-		param_acpi_on = true;
+		param_acpi_mode = acpi_mode_on;
 	else if (strcmp(arg, "force") == 0) /* force ACPI to be enabled */
-		param_acpi_force = true;
+		param_acpi_mode = acpi_mode_force;
+	else if (strcmp(arg, "hybrid") == 0) /* ACPI-DT hybrid mode */
+		param_acpi_mode = acpi_mode_hybrid;
 	else if (strcmp(arg, "nospcr") == 0) /* disable SPCR as default console */
 		param_acpi_nospcr = true;
+	else if (strcmp(arg, "parseonly") == 0) /* parse but do not use ACPI tables */
+		param_acpi_parse_only = true;
 	else
 		return -EINVAL;	/* Core will print when we return error */
 
@@ -198,14 +211,14 @@ out:
 void __init acpi_boot_table_init(void)
 {
 	/*
-	 * Enable ACPI instead of device tree unless
-	 * - ACPI has been disabled explicitly (acpi=off), or
-	 * - the device tree is not empty (it has more than just a /chosen node,
-	 *   and a /hypervisor node when running on Xen)
-	 *   and ACPI has not been [force] enabled (acpi=on|force)
+	 * When no ACPI mode (acpi=off|on|force|hybrid) has been specified,
+	 * enable ACPI if the device tree is empty (it only has a /chosen
+	 * node, and a /hypervisor node when running on Xen).
 	 */
-	if (param_acpi_off ||
-	    (!param_acpi_on && !param_acpi_force && !dt_is_stub()))
+	if (!param_acpi_mode)
+		param_acpi_mode = dt_is_stub() ? acpi_mode_on : acpi_mode_off;
+
+	if (param_acpi_mode == acpi_mode_off)
 		goto done;
 
 	/*
@@ -223,8 +236,11 @@ void __init acpi_boot_table_init(void)
 	 */
 	if (acpi_table_init() || acpi_fadt_sanity_check()) {
 		pr_err("Failed to init ACPI tables\n");
-		if (!param_acpi_force)
+		if (param_acpi_mode != acpi_mode_force)
 			disable_acpi();
+	} else if (param_acpi_mode == acpi_mode_hybrid) {
+		acpi_dt_hybrid = 1;
+		disable_acpi();
 	}
 
 done:
@@ -252,10 +268,10 @@ done:
 		 */
 		acpi_parse_spcr(earlycon_acpi_spcr_enable,
 			!param_acpi_nospcr);
-
-		if (IS_ENABLED(CONFIG_ACPI_BGRT))
-			acpi_table_parse(ACPI_SIG_BGRT, acpi_parse_bgrt);
 	}
+
+	if ((!acpi_disabled || acpi_dt_hybrid) && IS_ENABLED(CONFIG_ACPI_BGRT))
+		acpi_table_parse(ACPI_SIG_BGRT, acpi_parse_bgrt);
 }
 
 static pgprot_t __acpi_get_writethrough_mem_attribute(void)
@@ -458,3 +474,33 @@ int acpi_unmap_cpu(int cpu)
 }
 EXPORT_SYMBOL(acpi_unmap_cpu);
 #endif /* CONFIG_ACPI_HOTPLUG_CPU */
+
+int acpi_get_cpu_uid(unsigned int cpu, u32 *uid)
+{
+	struct acpi_madt_generic_interrupt *gicc;
+
+	if (cpu >= nr_cpu_ids)
+		return -EINVAL;
+
+	gicc = acpi_cpu_get_madt_gicc(cpu);
+	if (!gicc)
+		return -ENODEV;
+
+	*uid = gicc->uid;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(acpi_get_cpu_uid);
+
+int get_cpu_for_acpi_id(u32 uid)
+{
+	u32 cpu_uid;
+	int ret;
+
+	for (int cpu = 0; cpu < nr_cpu_ids; cpu++) {
+		ret = acpi_get_cpu_uid(cpu, &cpu_uid);
+		if (ret == 0 && uid == cpu_uid)
+			return cpu;
+	}
+
+	return -EINVAL;
+}

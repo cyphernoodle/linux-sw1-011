@@ -166,7 +166,7 @@ is made for the special case where there is a single big zone which controls
 the backlighting of almost all of the keyboard and there are some small areas
 with separate control, like just the 4 cursor keys, or the WASD keys. In this
 case the main zone should use 'kbd_backlight' for the function part of the name
-for compatiblity with (older) userspace code which is not aware of
+for compatibility with (older) userspace code which is not aware of
 the "kbd_zoned_backlight-<zone_name>" function naming scheme.
 
 While the smaller zones should use the new zoned naming scheme. Such a setup

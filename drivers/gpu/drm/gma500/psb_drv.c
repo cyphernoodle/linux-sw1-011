@@ -442,7 +442,7 @@ static int gma_remove_conflicting_framebuffers(struct pci_dev *pdev,
 	int ret;
 
 	ret = aperture_remove_conflicting_devices(base, size, name);
-	if (ret)
+	if (ret < 0)
 		return ret;
 
 	return __aperture_remove_legacy_vga_devices(pdev);
