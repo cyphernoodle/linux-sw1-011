@@ -42,35 +42,35 @@ jobs:
           git reset --hard jwr-sunxi/main
           git push origin sunxi-base --force
 
-      - name: Create and Auto-merge PRs to Acer-cachyos-Patches
+      - name: Create and Auto-merge PRs to 7.1-Torvalds+Sunxi
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Lista de tus ramas espejo que deben ir a Upstream-Acer
+          # Lista de tus ramas espejo que deben ir a 7.1-Torvalds+Sunxi
           BRANCHES=("torvalds-base" "sunxi-base")
 
           for branch in "${BRANCHES[@]}"; do
-            echo "Comparando $branch con Acer-cachyos-Patches..."
+            echo "Comparando $branch con 7.1-Torvalds+Sunxi..."
             
-            git checkout Acer-cachyos-Patches
+            git checkout 7.1-Torvalds+Sunxi
             git fetch origin
             
-            # Verificamos si la rama espejo tiene commits que no están en Upstream-Acer
-            if [ $(git rev-list --count Acer-cachyos-Patches..origin/$branch) -eq 0 ]; then
+            # Verificamos si la rama espejo tiene commits que no están en 7.1-Torvalds+Sunxi
+            if [ $(git rev-list --count 7.1-Torvalds+Sunxi..origin/$branch) -eq 0 ]; then
               echo "No hay cambios nuevos en $branch. Saltando."
               continue
             fi
 
             echo "Creando Pull Request para $branch..."
             PR_URL=$(gh pr create \
-              --base Acer-cachyos-Patches \
+              --base 7.1-Torvalds+Sunxi \
               --head $branch \
-              --title "Sync: $branch a Acer-cachyos-Patches" \
+              --title "Sync: $branch a 7.1-Torvalds+Sunxi" \
               --body "Actualización automática del kernel original. Mezcla automática si no hay conflictos." \
               2>/dev/null || echo "exists")
 
             if [ "$PR_URL" = "exists" ]; then
-              PR_URL=$(gh pr list --head $branch --base Acer-cachyos-Patches --json url --jq '.[0].url')
+              PR_URL=$(gh pr list --head $branch --base 7.1-Torvalds+Sunxi --json url --jq '.[0].url')
             fi
 
             if [ -n "$PR_URL" ] && [ "$PR_URL" != "null" ]; then
