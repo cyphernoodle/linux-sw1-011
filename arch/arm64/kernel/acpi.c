@@ -55,6 +55,7 @@ enum acpi_mode_t {
 
 static enum acpi_mode_t param_acpi_mode __initdata;
 static bool param_acpi_nospcr __initdata;
+static bool param_acpi_parse_only __initdata;
 
 static int __init parse_acpi(char *arg)
 {
@@ -72,6 +73,8 @@ static int __init parse_acpi(char *arg)
 		param_acpi_mode = acpi_mode_hybrid;
 	else if (strcmp(arg, "nospcr") == 0) /* disable SPCR as default console */
 		param_acpi_nospcr = true;
+	else if (strcmp(arg, "parseonly") == 0) /* parse but do not use ACPI tables */
+		param_acpi_parse_only = true;
 	else
 		return -EINVAL;	/* Core will print when we return error */
 
@@ -471,3 +474,33 @@ int acpi_unmap_cpu(int cpu)
 }
 EXPORT_SYMBOL(acpi_unmap_cpu);
 #endif /* CONFIG_ACPI_HOTPLUG_CPU */
+
+int acpi_get_cpu_uid(unsigned int cpu, u32 *uid)
+{
+	struct acpi_madt_generic_interrupt *gicc;
+
+	if (cpu >= nr_cpu_ids)
+		return -EINVAL;
+
+	gicc = acpi_cpu_get_madt_gicc(cpu);
+	if (!gicc)
+		return -ENODEV;
+
+	*uid = gicc->uid;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(acpi_get_cpu_uid);
+
+int get_cpu_for_acpi_id(u32 uid)
+{
+	u32 cpu_uid;
+	int ret;
+
+	for (int cpu = 0; cpu < nr_cpu_ids; cpu++) {
+		ret = acpi_get_cpu_uid(cpu, &cpu_uid);
+		if (ret == 0 && uid == cpu_uid)
+			return cpu;
+	}
+
+	return -EINVAL;
+}

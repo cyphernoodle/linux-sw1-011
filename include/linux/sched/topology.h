@@ -66,8 +66,54 @@ struct sched_group;
 struct sched_domain_shared {
 	atomic_t	ref;
 	atomic_t	nr_busy_cpus;
-	int		has_idle_cores;
-	int		nr_idle_scan;
+	int			has_idle_cores;
+	int			nr_idle_scan;
+#ifdef CONFIG_SCHED_POC_SELECTOR
+	/*
+	 * POC Selector: per-LLC idle CPU tracking
+	 */
+	u64		poc_llc_members;	/* bitmask of valid CPUs (relative to base) */
+	int		poc_cpu_base;		/* smallest CPU ID in this LLC */
+	u8		poc_affinity_shift;	/* bit shift for cpumask alignment */
+	bool	poc_fast_eligible;	/* true when LLC CPU count <= 64 */
+	bool	poc_cluster_valid;	/* true when cluster mask is usable */
+#ifdef CONFIG_SCHED_SMT
+	u8		poc_smt_shift;		/* bit distance between SMT siblings */
+	u64		poc_primary_mask;	/* bitmask of core representative CPUs */
+#endif
+
+	/*
+	 * Hot write path: idle state flag arrays (lock-free mode).
+	 * Each array = exactly 1 cache line (64B).
+	 * Writers: WRITE_ONCE (plain MOV, no LOCK prefix).
+	 * Readers: snapshot to stack, then multiply-and-shift aggregation.
+	 * Active only when sched_poc_atomic_bitmap=0.
+	 */
+	u8		poc_idle_cpus[64] ____cacheline_aligned;
+#ifdef CONFIG_SCHED_SMT
+	u8		poc_idle_cores[64] ____cacheline_aligned;
+#endif /* CONFIG_SCHED_SMT */
+
+	/*
+	 * Hot read/write path: idle state bitmaps (bitmap mode, default).
+	 * Readers: single atomic64_read (MOV on x86).
+	 * Writers: atomic64_or / atomic64_andnot (LOCK'd on x86).
+	 * Active only when sched_poc_atomic_bitmap=1.
+	 */
+	atomic64_t	poc_idle_cpus_mask ____cacheline_aligned;
+#ifdef CONFIG_SCHED_SMT
+	atomic64_t	poc_idle_cores_mask ____cacheline_aligned;
+#endif /* CONFIG_SCHED_SMT */
+
+	/*
+	 * Read-only lookup tables (written once at init).
+	 * Cacheline-aligned for exact prefetch targeting.
+	 */
+	u64		poc_cluster_mask[64] ____cacheline_aligned;
+#ifdef CONFIG_SCHED_SMT
+	u64		poc_smt_mask[64] ____cacheline_aligned;
+#endif /* CONFIG_SCHED_SMT */
+#endif /* CONFIG_SCHED_POC_SELECTOR */
 };
 
 struct sched_domain {
@@ -95,6 +141,7 @@ struct sched_domain {
 	unsigned int newidle_call;
 	unsigned int newidle_success;
 	unsigned int newidle_ratio;
+	u64 newidle_stamp;
 	u64 max_newidle_lb_cost;
 	unsigned long last_decay_max_lb_cost;
 
@@ -141,18 +188,30 @@ struct sched_domain {
 
 	unsigned int span_weight;
 	/*
-	 * Span of all CPUs in this domain.
+	 * See sched_domain_span(), on why flex arrays are broken.
 	 *
-	 * NOTE: this field is variable length. (Allocated dynamically
-	 * by attaching extra space to the end of the structure,
-	 * depending on how many CPUs the kernel has booted up with)
-	 */
 	unsigned long span[];
+	 */
 };
 
 static inline struct cpumask *sched_domain_span(struct sched_domain *sd)
 {
-	return to_cpumask(sd->span);
+	/*
+	 * Turns out that C flexible arrays are fundamentally broken since it
+	 * is allowed for offsetof(*sd, span) < sizeof(*sd), this means that
+	 * structure initialzation *sd = { ... }; which writes every byte
+	 * inside sizeof(*type), will over-write the start of the flexible
+	 * array.
+	 *
+	 * Luckily, the way we allocate sched_domain is by:
+	 *
+	 *   sizeof(*sd) + cpumask_size()
+	 *
+	 * this means that we have sufficient space for the whole flex array
+	 * *outside* of sizeof(*sd). So use that, and avoid using sd->span.
+	 */
+	unsigned long *bitmap = (void *)sd + sizeof(*sd);
+	return to_cpumask(bitmap);
 }
 
 extern void partition_sched_domains(int ndoms_new, cpumask_var_t doms_new[],
@@ -171,7 +230,6 @@ typedef int (*sched_domain_flags_f)(void);
 
 struct sd_data {
 	struct sched_domain *__percpu *sd;
-	struct sched_domain_shared *__percpu *sds;
 	struct sched_group *__percpu *sg;
 	struct sched_group_capacity *__percpu *sgc;
 };

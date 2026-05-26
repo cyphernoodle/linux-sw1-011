@@ -12,6 +12,7 @@
 #include <linux/auxiliary_bus.h>
 #include <linux/bitfield.h>
 #include <linux/bits.h>
+#include <linux/device.h>
 #include <linux/iio/adc/qcom-vadc-common.h>
 #include <linux/regmap.h>
 #include <linux/types.h>
@@ -100,8 +101,6 @@
 #define ADC5_GEN3_AMUX4_GPIO_100K_PU		0x4d
 
 #define ADC5_MAX_CHANNEL			0xc0
-
-struct device;
 
 enum adc5_cal_method {
 	ADC5_NO_CAL = 0,
