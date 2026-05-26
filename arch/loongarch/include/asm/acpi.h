@@ -12,7 +12,7 @@
 #include <asm/suspend.h>
 
 #ifdef CONFIG_ACPI
-#define acpi_parse_only 0	/* No parse only support on loongarch */
+#define acpi_dt_hybrid 0	/* No ACPI-DT hybrid mode on loongarch */
 extern int acpi_strict;
 extern int acpi_disabled;
 extern int acpi_pci_disabled;

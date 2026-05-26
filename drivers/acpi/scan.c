@@ -2254,7 +2254,7 @@ static void acpi_default_enumeration(struct acpi_device *device)
 		return;
 	}
 
-	if (acpi_parse_only)
+	if (acpi_dt_hybrid)
 		return;
 
 	if (match_string(acpi_system_dev_ids, -1, acpi_device_hid(device)) >= 0) {
