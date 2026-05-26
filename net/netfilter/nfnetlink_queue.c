@@ -60,6 +60,23 @@
  */
 #define NFQNL_MAX_COPY_RANGE (0xffff - NLA_HDRLEN)
 
+/* Composite key for packet lookup: (net, queue_num, packet_id) */
+struct nfqnl_packet_key {
+	possible_net_t net;
+	u32 packet_id;
+	u16 queue_num;
+} __aligned(sizeof(u32));  /* jhash2 requires 32-bit alignment */
+
+/* Helper to initialize composite key */
+static inline void nfqnl_init_key(struct nfqnl_packet_key *key,
+				  struct net *net, u32 packet_id, u16 queue_num)
+{
+	memset(key, 0, sizeof(*key));
+	write_pnet(&key->net, net);
+	key->packet_id = packet_id;
+	key->queue_num = queue_num;
+}
+
 struct nfqnl_instance {
 	struct hlist_node hlist;		/* global list of queues */
 	struct rhashtable nfqnl_packet_map;
@@ -240,7 +257,8 @@ __dequeue_entry(struct nfqnl_instance *queue, struct nf_queue_entry *entry)
 }
 
 static struct nf_queue_entry *
-find_dequeue_entry(struct nfqnl_instance *queue, unsigned int id)
+find_dequeue_entry(struct nfqnl_instance *queue, unsigned int id,
+		   struct net *net)
 {
 	struct nf_queue_entry *entry;
 
@@ -1509,7 +1527,7 @@ static int nfqnl_recv_verdict(struct sk_buff *skb, const struct nfnl_info *info,
 
 	verdict = ntohl(vhdr->verdict);
 
-	entry = find_dequeue_entry(queue, ntohl(vhdr->id));
+	entry = find_dequeue_entry(queue, ntohl(vhdr->id), info->net);
 	if (entry == NULL)
 		return -ENOENT;
 

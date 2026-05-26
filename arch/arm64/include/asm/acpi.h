@@ -79,6 +79,7 @@ typedef u64 phys_cpuid_t;
 extern int acpi_disabled;
 extern int acpi_noirq;
 extern int acpi_pci_disabled;
+extern int acpi_dt_hybrid;
 
 static inline void disable_acpi(void)
 {

@@ -488,7 +488,7 @@ static int ls2k_bmc_probe(struct pci_dev *dev, const struct pci_device_id *id)
 
 	/* Remove conflicting efifb device */
 	ret = aperture_remove_conflicting_devices(base, SZ_4M, "simple-framebuffer");
-	if (ret)
+	if (ret < 0)
 		return dev_err_probe(&dev->dev, ret, "Failed to removed firmware framebuffers\n");
 
 	return devm_mfd_add_devices(&dev->dev, PLATFORM_DEVID_AUTO,

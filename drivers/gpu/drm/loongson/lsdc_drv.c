@@ -218,7 +218,7 @@ lsdc_create_device(struct pci_dev *pdev,
 	ret = aperture_remove_conflicting_devices(ldev->vram_base,
 						  ldev->vram_size,
 						  driver->name);
-	if (ret) {
+	if (ret < 0) {
 		drm_err(ddev, "Remove firmware framebuffers failed: %d\n", ret);
 		return ERR_PTR(ret);
 	}
